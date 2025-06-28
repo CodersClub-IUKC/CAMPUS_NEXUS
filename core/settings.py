@@ -41,6 +41,9 @@ INSTALLED_APPS = [
 
     #my apps
     'campus_nexus',
+
+    #Libraries
+    'django_extensions'
 ]
 
 MIDDLEWARE = [
