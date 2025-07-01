@@ -54,9 +54,9 @@ class MemberSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def create(self, validated_data):
-        member = Faculty.members.through.objects.create(**validated_data)
+        member = Faculty.member.objects.create(**validated_data)
         return member
-
+    
     def update(self, instance, validated_data):
         instance.full_name = validated_data.get('full_name', instance.full_name)
         instance.email = validated_data.get('email', instance.email)
@@ -68,6 +68,7 @@ class MemberSerializer(serializers.ModelSerializer):
         instance.course = validated_data.get('course', instance.course)
         instance.save()
         return instance
+
     
 class CabinetSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100)
