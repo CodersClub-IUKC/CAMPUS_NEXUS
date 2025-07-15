@@ -123,6 +123,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [
+    BASE_DIR/"campus_nexus" /"img"]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -130,10 +132,69 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 JAZZMIN_SETTINGS = {
-    "site_title": "Library Admin",
-    "site_header": "",
+    "site_title": "CAMPUS_NEXUS",
+    "site_header": "CAMPUS_NEXUS",
     "site_brand": "CAMPUS NEXUS",
+    "site_logo": "home.jpg",
+    "site_logo_classes": "img-circle",
     "welcome_sign": "Welcome to Project Admin",
-    "copyright": "Coder's Club IUIU-KC"
+    "copyright": "Coder's Club IUIU-KC",
+    "show_sidebar": True,
+    "navigation_expanded": True,
+
+        "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.Group": "fas fa-users",
+        "campus_nexus.member": "fas fa-user-graduate",
+        "campus_nexus.course": "fas fa-book",
+        "campus_nexus.event": "fas fa-calendar-alt",
+        "campus_nexus.cabinet": "fas fa-cabinet-filing",
+        "campus_nexus.association": "fas fa-users",
+        "campus_nexus.faculty": "fas fa-chalkboard-teacher",
+        "campus_nexus.fee": "fas fa-money-bill-wave",
+        "campus_nexus.membership": "fas fa-id-card",
+        "campus_nexus.payment": "fas fa-credit-card",
+    },
+
+        "default_icon_parents": "fas fa-chevron-circle-right",
+    "default_icon_children": "fas fa-circle",
+
+    "related_modal_active": True,
+    "use_google_fonts_cdn": True,
+    "show_ui_builder": True,  
     
+}
+
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": "navbar-primary",
+    "accent": "accent-navy",
+    "navbar": "navbar-primary navbar-dark",
+    "no_navbar_border": False,
+    "navbar_fixed": False,
+    "layout_boxed": False,
+    "footer_fixed": False,
+    "sidebar_fixed": True,
+    "sidebar": "sidebar-dark-success",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": False,
+    "sidebar_nav_compact_style": True,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
+    "theme": "litera",
+    "dark_mode_theme": None,
+    "button_classes": {
+        "primary": "btn-primary",
+        "secondary": "btn-outline-secondary",
+        "info": "btn-info",
+        "warning": "btn-warning",
+        "danger": "btn-danger",
+        "success": "btn-success"
+    },
+    "actions_sticky_top": True
 }
