@@ -38,7 +38,8 @@ class Member(models.Model):
         ('external', 'External'),
     ]
 
-    full_name = models.CharField(max_length=150)
+    first_name = models.CharField(max_length=50, default='')
+    last_name = models.CharField(max_length=50, default='')
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=15, validators=[RegexValidator(r'^\+?\d{9,15}$')])
 
@@ -49,6 +50,10 @@ class Member(models.Model):
     faculty = models.ForeignKey(Faculty, on_delete=models.SET_NULL, null=True, blank=True)
     course = models.ForeignKey(Course, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
 
     def clean(self):
         from django.core.exceptions import ValidationError
@@ -77,14 +82,22 @@ class Membership(models.Model):
 
 
 class Cabinet(models.Model):
-    membership = models.OneToOneField(Membership, on_delete=models.CASCADE, related_name='cabinet_position')
-    position = models.CharField(max_length=100)
-    start_date = models.DateField()
-    end_date = models.DateField(null=True, blank=True)
-    is_active = models.BooleanField(default=True)
+   association = models.OneToOneField(Association, on_delete=models.CASCADE, related_name='cabinets')
+   year = models.CharField(max_length=10)
+
+   def __str__(self):
+       return f"{self.association.name} Cabinet ({self.year})"
+   
+class CabinetMember(models.Model):
+    cabinet = models.ForeignKey(Cabinet, on_delete=models.CASCADE, related_name='cabinet_members')
+    member = models.ForeignKey(Member, on_delete=models.CASCADE)
+    role = models.CharField(max_length=50)
+
+    class Meta:
+        unique_together = ('cabinet', 'role')
 
     def __str__(self):
-        return f"{self.membership.member.full_name} - {self.position}"
+        return f"{self.role} - {self.member.full_name}"
 
 
 class Fee(models.Model):

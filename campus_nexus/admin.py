@@ -1,5 +1,5 @@
 from django.contrib import admin
-from campus_nexus.models import Faculty, Course, Association, Member, Cabinet, Payment, Event, Fee, Membership
+from campus_nexus.models import Faculty, Course, Association, Member, Cabinet, Payment, Event, Fee, Membership, CabinetMember
 
 @admin.register(Faculty)
 class FacultyAdmin(admin.ModelAdmin):
@@ -36,11 +36,24 @@ class MembershipAdmin(admin.ModelAdmin):
     ordering = ('-joined_at',)
     raw_id_fields = ('member', 'association')
 
+class CabinetMemberInline(admin.TabularInline):
+    model = CabinetMember
+    extra = 1
+    verbose_name = 'Cabinet Member'
+    verbose_name_plural = 'Cabinet Members'
+
 @admin.register(Cabinet)
 class CabinetAdmin(admin.ModelAdmin):
-    list_display = ('position', 'membership', 'start_date', 'is_active', 'end_date')
-    search_fields = ('name',)
-    list_filter = ('membership',)
+    inlines = [CabinetMemberInline]
+    list_display = ('association', 'year')
+
+@admin.register(CabinetMember)
+class CabinetMemberAdmin(admin.ModelAdmin):
+    list_display = ('cabinet', 'member', 'role')
+    search_fields = ('member__full_name', 'cabinet__association__name')
+    list_filter = ('cabinet', 'role')
+    ordering = ('-cabinet__year', 'role')
+    raw_id_fields = ('member', 'cabinet')
 
 @admin.register(Fee)
 class FeeAdmin(admin.ModelAdmin):
