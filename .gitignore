@@ -2,3 +2,7 @@
 /shelf/
 /workspace.xml
 .nexusenv/
+# Virtual environment
+.venv/
+venv/
+env/
