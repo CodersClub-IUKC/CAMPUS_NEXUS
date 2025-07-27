@@ -13,11 +13,14 @@ from campus_nexus.serializers import (
     CabinetSerializer,
     PaymentSerializer,
     EventSerializer
-)   
+)
+
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.permissions import IsAuthenticated
 
 class FacultyListView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         faculties = Faculty.objects.all()
@@ -29,11 +32,11 @@ class FacultyListView(APIView):
         if serializer.is_valid():
             faculty = serializer.save()
             return Response(FacultySerializer(faculty).data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)  
-    
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class FacultyDetailView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request, pk):
         try:
@@ -60,12 +63,12 @@ class FacultyDetailView(APIView):
             faculty.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Faculty.DoesNotExist:
-            return Response({"error": "Faculty not found"}, status=status.HTTP_404_NOT_FOUND)   
-        
+            return Response({"error": "Faculty not found"}, status=status.HTTP_404_NOT_FOUND)
+
 class CourseListView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
-    
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
+
     def get(self, request):
         courses = Course.objects.all()
         serializer = CourseSerializer(courses, many=True)
@@ -77,11 +80,11 @@ class CourseListView(APIView):
             course = serializer.save()
             return Response(CourseSerializer(course).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
 class CourseDetailView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
-    
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
+
     def get(self, request, pk):
         try:
             course = Course.objects.get(pk=pk)
@@ -108,10 +111,10 @@ class CourseDetailView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Course.DoesNotExist:
             return Response({"error": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
-        
+
 class AssociationListView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         associations = Association.objects.all()
@@ -126,8 +129,8 @@ class AssociationListView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class AssociationDetailView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request, pk):
         try:
@@ -157,8 +160,8 @@ class AssociationDetailView(APIView):
             return Response({"error": "Association not found"}, status=status.HTTP_404_NOT_FOUND)
 
 class MemberListView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         members = Member.objects.all()
@@ -173,8 +176,8 @@ class MemberListView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class MemberDetailView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request, pk):
         try:
@@ -201,11 +204,11 @@ class MemberDetailView(APIView):
             member.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Member.DoesNotExist:
-            return Response({"error": "Member not found"}, status=status.HTTP_404_NOT_FOUND)    
+            return Response({"error": "Member not found"}, status=status.HTTP_404_NOT_FOUND)
 
 class CabinetListView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
     def get(self, request):
         cabinets = Cabinet.objects.all()
         serializer = CabinetSerializer(cabinets, many=True)
@@ -217,10 +220,10 @@ class CabinetListView(APIView):
             cabinet = serializer.save()
             return Response(CabinetSerializer(cabinet).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
 class CabinetDetailView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
     def get(self, request, pk):
         try:
             cabinet = Cabinet.objects.get(pk=pk)
@@ -246,11 +249,11 @@ class CabinetDetailView(APIView):
             cabinet.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Cabinet.DoesNotExist:
-            return Response({"error": "Cabinet not found"}, status=status.HTTP_404_NOT_FOUND)   
-        
+            return Response({"error": "Cabinet not found"}, status=status.HTTP_404_NOT_FOUND)
+
 class PaymentListView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         payments = Payment.objects.all()
@@ -263,10 +266,10 @@ class PaymentListView(APIView):
             payment = serializer.save()
             return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
 class PaymentDetailView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request, pk):
         try:
@@ -293,11 +296,11 @@ class PaymentDetailView(APIView):
             payment.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Payment.DoesNotExist:
-            return Response({"error": "Payment not found"}, status=status.HTTP_404_NOT_FOUND)   
+            return Response({"error": "Payment not found"}, status=status.HTTP_404_NOT_FOUND)
 
 class EventListView(APIView):
-    # authentication_classes = (JWTAuthentication)
-    # permission_classes = (IsAuthenticated)
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
     def get(self, request):
         events = Event.objects.all()
         serializer = EventSerializer(events, many=True)
@@ -309,11 +312,11 @@ class EventListView(APIView):
             event = serializer.save()
             return Response(EventSerializer(event).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
 class EventDetailView(APIView):
     # authentication_classes = (JWTAuthentication)
     # permission_classes = (IsAuthenticated)
-    
+
     def get(self, request, pk):
         try:
             event = Event.objects.get(pk=pk)
@@ -340,4 +343,3 @@ class EventDetailView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Event.DoesNotExist:
             return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
-        
