@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -44,8 +44,11 @@ INSTALLED_APPS = [
     'campus_nexus',
 
     #Libraries
-    'django_extensions'
+    'django_extensions',
+    'rest_framework',
+    'rest_framework_simplejwt',
 ]
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -122,79 +125,200 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
-STATICFILES_DIRS = [
-    BASE_DIR/"campus_nexus" /"img"]
+# Static files (CSS, JavaScript, Images)
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+
+
+# Jazzmin Settings
 JAZZMIN_SETTINGS = {
-    "site_title": "CAMPUS_NEXUS",
-    "site_header": "CAMPUS_NEXUS",
-    "site_brand": "CAMPUS NEXUS",
-    "site_logo": "home.jpg",
+    # Title of the window
+    "site_title": "Campus Nexus Admin",
+
+    # Title on the login screen (19 chars max)
+    "site_header": "Campus Nexus",
+
+    # Title on the brand (19 chars max)
+    "site_brand": "Campus Nexus",
+
+    "site_logo": "img/CAMPUS_NEXUS.png",
+
+    # Logo to use for login form
+    "login_logo": "img/CAMPUS_NEXUS.png",
+
+    # CSS classes that are applied to the logo above
     "site_logo_classes": "img-circle",
-    "welcome_sign": "Welcome to Project Admin",
+
+    # Relative path to a favicon for your site
+    "site_icon": "images/favicon.ico",
+
+    # Welcome text on the login screen
+    "welcome_sign": "Welcome to Campus Nexus Administration",
+
+    # Copyright on the footer
     "copyright": "Coder's Club IUIU-KC",
+
+    # The model admin to search from the search bar
+    "search_model": ["auth.User", "auth.Group"],
+
+    # Field name on user model that contains avatar
+    "user_avatar": None,
+
+
+
+    # Links to put along the top menu
+    "topmenu_links": [
+        {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
+        {"name": "Support", "url": "https://github.com/CodersClub-IUKC/CAMPUS_NEXUS", "new_window": True},
+        {"model": "auth.User"},
+        {"app": "campus_nexus"},
+    ],
+
+
+
+    # Additional links to include in the user menu on the top right
+    "usermenu_links": [
+        {"name": "Support", "url": "https://github.com/CodersClub-IUKC/CAMPUS_NEXUS", "new_window": True},
+        {"model": "auth.user"},
+
+        {
+            "name": "Profile",
+            "url": "admin:auth_user_change",  # Links to current user change form
+            "icon": "fas fa-user"
+        },
+        {
+            "name": "Log out",
+            "url": "admin:logout",
+            "icon": "fas fa-sign-out-alt"
+        },
+],
+
+
+    #############
+    # Side Menu #
+    #############
+
+    # Whether to display the side menu
     "show_sidebar": True,
+
+    # Whether to aut-expand the menu
     "navigation_expanded": True,
 
-        "icons": {
+    # Hide these apps when generating side menu
+    "hide_apps": [],
+
+    # Hide these models when generating side menu
+    "hide_models": [],
+
+    # List of apps (and models) to base side menu ordering off of
+    "order_with_respect_to": [
+        "auth",
+        "campus_nexus",
+        "campus_nexus.associations",
+        "campus_nexus.cabinet_members",
+        "campus_nexus.cabinets",
+        "campus_nexus.courses",
+        "campus_nexus.events",
+        "campus_nexus.faculties",
+        "campus_nexus.fees",
+        "campus_nexus.members",
+        "campus_nexus.memberships",
+        "campus_nexus.payments"
+    ],
+
+    # Custom icons for side menu apps/models
+    "icons": {
         "auth": "fas fa-users-cog",
         "auth.user": "fas fa-user",
         "auth.Group": "fas fa-users",
-        "campus_nexus.member": "fas fa-user-graduate",
+        "campus_nexus.association": "fas fa-university",
+        "campus_nexus.cabinetmember": "fas fa-user-tie",
+        "campus_nexus.cabinet": "fas fa-briefcase",
         "campus_nexus.course": "fas fa-book",
         "campus_nexus.event": "fas fa-calendar-alt",
-        "campus_nexus.cabinet": "fas fa-cabinet-filing",
-        "campus_nexus.association": "fas fa-users",
         "campus_nexus.faculty": "fas fa-chalkboard-teacher",
-        "campus_nexus.fee": "fas fa-money-bill-wave",
+        "campus_nexus.fee": "fas fa-dollar-sign",
+        "campus_nexus.member": "fas fa-user-friends",
         "campus_nexus.membership": "fas fa-id-card",
-        "campus_nexus.payment": "fas fa-credit-card",
+        "campus_nexus.payment": "fas fa-credit-card"
     },
 
-        "default_icon_parents": "fas fa-chevron-circle-right",
+    # Icons that are used when one is not manually specified
+    "default_icon_parents": "fas fa-chevron-circle-right",
     "default_icon_children": "fas fa-circle",
 
-    "related_modal_active": True,
+
+    "related_modal_active": False,
+
+
+    "custom_css": "css/custom_jazzmin.css",
+    #"custom_js": "js/custom_jazzmin.js",
+
+
     "use_google_fonts_cdn": True,
-    "show_ui_builder": True,  
-    
+
+
+    "show_ui_builder": False,
+
+
+    "changeform_format": "horizontal_tabs",
+
+
+    "changeform_format_overrides": {
+        "auth.user": "collapsible",
+        "auth.group": "vertical_tabs"
+    },
+
+    # Add a language dropdown into the admin
+    "language_chooser": False,
 }
 
+# UI Tweaks for colors and theme
 JAZZMIN_UI_TWEAKS = {
     "navbar_small_text": False,
     "footer_small_text": False,
     "body_small_text": False,
     "brand_small_text": False,
-    "brand_colour": "navbar-primary",
-    "accent": "accent-navy",
-    "navbar": "navbar-primary navbar-dark",
+    "brand_colour": "navbar-purple",
+    "accent": "accent-purple",
+    "navbar": "navbar-purple navbar-dark",
     "no_navbar_border": False,
-    "navbar_fixed": False,
-    "layout_boxed": False,
+    "navbar_fixed": True,
     "footer_fixed": False,
     "sidebar_fixed": True,
-    "sidebar": "sidebar-dark-success",
+    "sidebar": "sidebar-dark-purple",
     "sidebar_nav_small_text": False,
     "sidebar_disable_expand": False,
     "sidebar_nav_child_indent": False,
-    "sidebar_nav_compact_style": True,
+    "sidebar_nav_compact_style": False,
     "sidebar_nav_legacy_style": False,
     "sidebar_nav_flat_style": False,
-    "theme": "litera",
+    "theme": "default",
     "dark_mode_theme": None,
     "button_classes": {
-        "primary": "btn-primary",
-        "secondary": "btn-outline-secondary",
+        "primary": "btn-purple",
+        "secondary": "btn-secondary",
         "info": "btn-info",
         "warning": "btn-warning",
         "danger": "btn-danger",
         "success": "btn-success"
     },
-    "actions_sticky_top": True
+    "actions_sticky_top": False
+}
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
 }
