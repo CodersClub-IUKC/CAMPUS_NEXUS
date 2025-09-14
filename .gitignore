@@ -6,6 +6,9 @@
 .venv/
 venv/
 env/
+*.pyc
+__pycache__/
+db.sqlite3
 # Python cache files
 __pycache__/
 *.pyc

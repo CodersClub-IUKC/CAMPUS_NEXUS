@@ -11,7 +11,7 @@ from .views import (
     CabinetListView, CabinetDetailView,
     PaymentListView, PaymentDetailView,
     MembershipListView, MembershipDetailView,
-    FeeListView, FeeDetailView
+    FeeListView, FeeDetailView, CabinetMemberListView, CabinetMemberDetailView
 )
 
 urlpatterns = [
@@ -38,6 +38,10 @@ urlpatterns = [
     # Cabinets
     path('cabinets/', CabinetListView.as_view(), name='cabinet-list'),
     path('cabinets/<int:pk>/', CabinetDetailView.as_view(), name='cabinet-detail'),
+
+    #Cabinet Members
+    path('cabinet-members/', CabinetMemberListView.as_view(), name='cabinet-member-list'),
+    path('cabinet-members/<int:pk>/', CabinetMemberDetailView.as_view(), name='cabinet-member-detail'),
 
     # Payments
     path('payments/', PaymentListView.as_view(), name='payment-list'),
