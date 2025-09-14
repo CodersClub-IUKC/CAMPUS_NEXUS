@@ -24,7 +24,7 @@ class Association(models.Model):
     name = models.CharField(max_length=100)
     faculty = models.ForeignKey(Faculty, on_delete=models.SET_NULL, null=True, blank=True, related_name='associations')
     description = models.TextField(blank=True)
-    logo_url = models.URLField(blank=True, null=True)
+    logo_image = models.ImageField(upload_to='associations/logos/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -87,7 +87,7 @@ class Cabinet(models.Model):
 
    def __str__(self):
        return f"{self.association.name} Cabinet ({self.year})"
-   
+
 class CabinetMember(models.Model):
     cabinet = models.ForeignKey(Cabinet, on_delete=models.CASCADE, related_name='cabinet_members')
     member = models.ForeignKey(Member, on_delete=models.CASCADE)
@@ -122,7 +122,7 @@ class Payment(models.Model):
     amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
     payment_date = models.DateTimeField(auto_now_add=True)
     payment_method = models.CharField(max_length=50)
-    receipt_url = models.URLField(null=True, blank=True)
+    receipt_image = models.ImageField(upload_to='payments/receipts/', null=True, blank=True)
     status = models.CharField(max_length=20)
 
     def __str__(self):
@@ -140,5 +140,3 @@ class Event(models.Model):
 
     def __str__(self):
         return self.title
-
-
