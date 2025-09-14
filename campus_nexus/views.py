@@ -7,16 +7,9 @@ from campus_nexus.models import (
     Faculty, Course, Association, Member,
     Cabinet, Payment, Event, Membership, Fee
 )
-from campus_nexus.serializers import (
-    FacultySerializer,
-    CourseSerializer,
-    AssociationSerializer,
-    MemberSerializer,
-    CabinetSerializer,
-    PaymentSerializer,
-    EventSerializer,
-    MembershipSerializer,
-    FeeSerializer
+from campus_nexus.serializers import ( CabinetMemberSerializer,
+    FacultySerializer, CourseSerializer, AssociationSerializer, MemberSerializer,
+    CabinetSerializer, PaymentSerializer, EventSerializer, MembershipSerializer, FeeSerializer
 )
 
 
@@ -82,6 +75,14 @@ class CabinetDetailView(BaseAuthenticatedView, generics.RetrieveUpdateDestroyAPI
     queryset = Cabinet.objects.all()
     serializer_class = CabinetSerializer
 
+# -Cabinet Member
+class CabinetMemberListView(BaseAuthenticatedView, generics.ListCreateAPIView):
+    queryset = Cabinet.objects.all()
+    serializer_class = CabinetMemberSerializer
+
+class CabinetMemberDetailView(BaseAuthenticatedView, generics.RetrieveUpdateDestroyAPIView):
+    queryset = Cabinet.objects.all()
+    serializer_class = CabinetMemberSerializer
 
 #  Payment
 class PaymentListView(BaseAuthenticatedView, generics.ListCreateAPIView):

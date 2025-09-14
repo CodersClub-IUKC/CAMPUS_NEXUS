@@ -32,10 +32,11 @@ class MemberSerializer(serializers.ModelSerializer):
 
 
 class CabinetSerializer(serializers.ModelSerializer):
+    association_name = serializers.CharField(source="association.name", read_only=True)
+
     class Meta:
         model = Cabinet
         fields = '__all__'
-
 
 class CabinetMemberSerializer(serializers.ModelSerializer):
     member_name = serializers.CharField(source="member.full_name", read_only=True)
