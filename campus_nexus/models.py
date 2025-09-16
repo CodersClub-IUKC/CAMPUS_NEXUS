@@ -1,10 +1,17 @@
-
 from django.db import models
 from django.core.validators import RegexValidator
+from django.core.exceptions import ValidationError
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
 
 class Faculty(models.Model):
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+      verbose_name_plural = 'Faculties'
 
     def __str__(self):
         return self.name
@@ -19,12 +26,27 @@ class Course(models.Model):
     def __str__(self):
         return self.name
 
+class AssociationAdmin(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='association_admin', limit_choices_to={'is_staff': True, 'is_superuser': False})
+    association = models.ForeignKey('Association', on_delete=models.CASCADE, related_name='admins')
+
+    def clean(self):
+        if self.user and self.user.is_superuser:
+            raise ValidationError("Superusers cannot be assigned as Association Admins.")
+
+        # Require staff=True so they can log in to admin
+        if self.user and not self.user.is_staff:
+            raise ValidationError("Association Admins must have is_staff=True to access the admin site.")
+
+    def __str__(self):
+        return f"{self.user.username} - {self.association.name}"
 
 class Association(models.Model):
     name = models.CharField(max_length=100)
     faculty = models.ForeignKey(Faculty, on_delete=models.SET_NULL, null=True, blank=True, related_name='associations')
     description = models.TextField(blank=True)
     logo_image = models.ImageField(upload_to='associations/logos/', blank=True, null=True)
+    theme_color = models.CharField(max_length=20, default="#0d6efd")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -63,7 +85,7 @@ class Member(models.Model):
             raise ValidationError("National ID number (NIN) is required for external members.")
 
     def __str__(self):
-        return self.full_name
+        return f"{self.full_name} ({self.registration_number})"
 
 
 class Membership(models.Model):
