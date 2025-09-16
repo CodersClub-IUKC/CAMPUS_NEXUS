@@ -46,7 +46,6 @@ class Association(models.Model):
     faculty = models.ForeignKey(Faculty, on_delete=models.SET_NULL, null=True, blank=True, related_name='associations')
     description = models.TextField(blank=True)
     logo_image = models.ImageField(upload_to='associations/logos/', blank=True, null=True)
-    theme_color = models.CharField(max_length=20, default="#0d6efd")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

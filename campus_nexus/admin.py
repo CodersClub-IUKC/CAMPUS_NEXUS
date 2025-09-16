@@ -120,7 +120,6 @@ class MembershipAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
             return excluded_fields
         return excluded_fields
 
-    
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         if self.is_superuser(request):
