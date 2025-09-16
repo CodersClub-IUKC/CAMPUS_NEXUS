@@ -240,7 +240,7 @@ class PaymentAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('title', 'association', 'event_date', 'created_at', 'description','venue','posted_by')
-    # search_fields = ('name',)
+    search_fields = ('name',)
     list_filter = ('association', 'event_date')
     ordering = ('-created_at',)
 
