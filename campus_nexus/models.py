@@ -85,7 +85,7 @@ class Member(models.Model):
             raise ValidationError("National ID number (NIN) is required for external members.")
 
     def __str__(self):
-        return self.full_name
+        return f"{self.full_name} ({self.registration_number})"
 
 
 class Membership(models.Model):
