@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from campus_nexus.models import (
     Faculty, Course, Association, Member, Cabinet, CabinetMember,
-    Payment, Event, Fee, Membership
+    Payment, Event, Fee, Membership, Feedback
 )
 
 
@@ -67,4 +67,10 @@ class FeeSerializer(serializers.ModelSerializer):
 class MembershipSerializer(serializers.ModelSerializer):
     class Meta:
         model = Membership
+        fields = '__all__'
+
+
+class FeedbackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Feedback
         fields = '__all__'
