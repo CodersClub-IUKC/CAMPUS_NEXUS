@@ -194,6 +194,7 @@ JAZZMIN_SETTINGS = {
     "order_with_respect_to": [
         "auth",
         "campus_nexus",
+        "campus_nexus.associationadmins",
         "campus_nexus.associations",
         "campus_nexus.cabinet_members",
         "campus_nexus.cabinets",
@@ -204,12 +205,14 @@ JAZZMIN_SETTINGS = {
         "campus_nexus.members",
         "campus_nexus.memberships",
         "campus_nexus.payments",
+        "campus_nexus.feedbacks",
     ],
     # Custom icons for side menu apps/models
     "icons": {
         "auth": "fas fa-users-cog",
         "auth.user": "fas fa-user",
         "auth.Group": "fas fa-users",
+        "campus_nexus.associationadmin": "fas fa-user-shield",
         "campus_nexus.association": "fas fa-university",
         "campus_nexus.cabinetmember": "fas fa-user-tie",
         "campus_nexus.cabinet": "fas fa-briefcase",
@@ -220,6 +223,7 @@ JAZZMIN_SETTINGS = {
         "campus_nexus.member": "fas fa-user-friends",
         "campus_nexus.membership": "fas fa-id-card",
         "campus_nexus.payment": "fas fa-credit-card",
+        "campus_nexus.feedback": "fas fa-comment-dots",
     },
     # Icons that are used when one is not manually specified
     "default_icon_parents": "fas fa-chevron-circle-right",
