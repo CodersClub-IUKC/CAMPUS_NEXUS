@@ -22,8 +22,10 @@ def association_css_url(context):
 @register.simple_tag(takes_context=True)
 def association_logo_url(context):
     from jazzmin.settings import get_settings
+    from django.templatetags.static import static
+
     jazzmin_settings = get_settings()
-    default_logo = jazzmin_settings["site_logo"]
+    default_logo = static(jazzmin_settings["site_logo"])
 
     request = context.get("request")
     if not request or not request.user.is_authenticated:
