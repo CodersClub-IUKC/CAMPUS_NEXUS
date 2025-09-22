@@ -5,11 +5,11 @@ from rest_framework.parsers import MultiPartParser, FormParser
 
 from campus_nexus.models import (
     Faculty, Course, Association, Member,
-    Cabinet, Payment, Event, Membership, Fee
+    Cabinet, Payment, Event, Membership, Fee, Feedback
 )
 from campus_nexus.serializers import ( CabinetMemberSerializer,
     FacultySerializer, CourseSerializer, AssociationSerializer, MemberSerializer,
-    CabinetSerializer, PaymentSerializer, EventSerializer, MembershipSerializer, FeeSerializer
+    CabinetSerializer, PaymentSerializer, EventSerializer, MembershipSerializer, FeeSerializer, FeedbackSerializer
 )
 
 
@@ -128,3 +128,13 @@ class FeeListView(BaseAuthenticatedView, generics.ListCreateAPIView):
 class FeeDetailView(BaseAuthenticatedView, generics.RetrieveUpdateDestroyAPIView):
     queryset = Fee.objects.all()
     serializer_class = FeeSerializer
+
+
+#Feedback
+class FeedbackListView(BaseAuthenticatedView, generics.ListCreateAPIView):
+    queryset = Feedback.objects.all()
+    serializer_class = FeedbackSerializer
+
+class FeedbackDetailView(BaseAuthenticatedView, generics.RetrieveUpdateDestroyAPIView):
+    queryset = Feedback.objects.all()
+    serializer_class = FeedbackSerializer
