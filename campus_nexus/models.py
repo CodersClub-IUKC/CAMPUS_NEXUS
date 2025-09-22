@@ -182,3 +182,13 @@ class Event(models.Model):
 
     def __str__(self):
         return self.title
+
+class Feedback(models.Model):
+    association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name='feedbacks')
+    member = models.ForeignKey(Member, on_delete=models.CASCADE, related_name='feedbacks')
+    subject = models.CharField(max_length=200)
+    message = models.TextField()
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Feedback from {self.member.full_name} - {self.subject}"
