@@ -1,0 +1,23 @@
+{% extends 'admin/base.html' %}
+{% load static jazzmin association_tags %}
+{% get_jazzmin_settings request as jazzmin_settings %}
+
+
+{% block extrahead %}
+{{ block.super }}
+
+<link rel="stylesheet" href="{% association_css_url %}">
+
+{% endblock %}
+
+{% block extrajs %}
+<script>
+    const associationLogoUrl = "{% association_logo_url %}";
+    
+    const brandImg = document.querySelector('#jazzy-logo > img');
+    if (brandImg && associationLogoUrl) {
+        brandImg.src = associationLogoUrl;
+    }
+</script>
+
+{% endblock %}
