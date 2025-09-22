@@ -32,6 +32,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    "campus_nexus",
     "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -40,7 +41,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     # my apps
-    "campus_nexus",
     # Libraries
     "django_extensions",
     "rest_framework",
@@ -71,7 +71,6 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                "campus_nexus.context_processors.jazzmin_dynamic_branding"
             ],
         },
     },
@@ -229,7 +228,6 @@ JAZZMIN_SETTINGS = {
     "default_icon_parents": "fas fa-chevron-circle-right",
     "default_icon_children": "fas fa-circle",
     "related_modal_active": False,
-    "custom_css": "css/custom_jazzmin.css",
     "custom_js": "js/custom_jazzmin.js",
     "use_google_fonts_cdn": True,
     "show_ui_builder": False,
@@ -271,3 +269,5 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
 }
+
+ASSOCIATION_DEFAULT_THEME = ("#3b82f6", "#64748b")
