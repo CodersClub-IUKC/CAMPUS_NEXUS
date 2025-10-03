@@ -1,8 +1,15 @@
-# Default ignored files
-/shelf/
-/workspace.xml
-.nexusenv/
 # Virtual environment
-.venv/
+.nexusenv/
 venv/
 env/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Django
+*.log
+db.sqlite3
+media/
+staticfiles/
