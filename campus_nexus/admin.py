@@ -83,7 +83,7 @@ class AssociationAdmin(admin.ModelAdmin):
 @admin.register(Member)
 class MemberAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('full_name', 'email', 'member_type', 'faculty', 'course', 'created_at',)
-    # search_fields = ('full_name', 'email')
+
     list_filter = ('member_type', 'faculty', 'course')
     search_fields = ("first_name", "last_name", "registration_number")
     ordering = ('-created_at',)
