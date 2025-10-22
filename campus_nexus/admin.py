@@ -12,6 +12,7 @@ from campus_nexus.models import (
     CabinetMember,
     AssociationAdmin,
     Feedback,
+    Guild,
 )
 
 class CheckUserIdentityMixin:
@@ -21,31 +22,47 @@ class CheckUserIdentityMixin:
 
     def is_association_admin(self, request):
         return getattr(request.user, "association_admin", None)
-    
+
     def is_guild_admin(self, request):
         return getattr(request.user, "guild", None)
-    
+
 
 @admin.register(Guild)
-class GuildAdmin(admin.ModelAdmin):
+class GuildAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('user',)
     search_fields = ('user__username',)
     ordering = ('user__username',)
     raw_id_fields = ('user',)
 
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        # Association admins cannot see guild admins
+        return qs.none()
+
 @admin.register(AssociationAdmin)
-class AssocationAdminAdmin(admin.ModelAdmin):
+class AssocationAdminAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('user', 'association')
     search_fields = ('user__username', 'association__name')
     list_filter = ('association',)
     ordering = ('user__username',)
     raw_id_fields = ('user', 'association')
 
-@admin.register(Faculty)
-class FacultyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'created_at')
-    # search_fields = ('name',)
-    ordering = ('-created_at',)
+    def has_module_permission(self, request):
+        return request.user.is_superuser
 
     def has_add_permission(self, request):
         return request.user.is_superuser
@@ -56,21 +73,65 @@ class FacultyAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        if assoc_admin := self.is_association_admin(request):
+            # Association admins can only see their own association admin entry
+            return qs.filter(association=assoc_admin.association)
+        return qs.none()
+
+@admin.register(Faculty)
+class FacultyAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
+    list_display = ('name', 'created_at')
+    # search_fields = ('name',)
+    ordering = ('-created_at',)
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request) or self.is_association_admin(request)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser or self.is_guild_admin(request):
+            return qs
+        return qs.none()
+
 @admin.register(Course)
-class CourseAdmin(admin.ModelAdmin):
+class CourseAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('name', 'duration_years', 'faculty', 'created_at')
     # search_fields = ('name',)
     list_filter = ('faculty',)
     ordering = ('-created_at',)
 
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request)
+
     def has_add_permission(self, request):
-        return request.user.is_superuser
+        return request.user.is_superuser or self.is_association_admin(request)
 
     def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return request.user.is_superuser or self.is_association_admin(request)
 
     def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser or self.is_guild_admin(request):
+            return qs
+        if assoc_admin := self.is_association_admin(request):
+            return qs.filter(faculty=assoc_admin.association.faculty)
+        return qs.none()
 
 @admin.register(Association)
 class AssociationAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
@@ -80,16 +141,24 @@ class AssociationAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     ordering = ('-created_at',)
 
     def has_module_permission(self, request):
-        return request.user.is_superuser
+        return request.user.is_superuser or self.is_guild_admin(request)
 
     def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return request.user.is_superuser or self.is_guild_admin(request)
 
     def has_add_permission(self, request):
         return request.user.is_superuser or self.is_guild_admin(request)
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser or self.is_guild_admin(request):
+            return qs
+        if assoc_admin := self.is_association_admin(request):
+            return qs.filter(association=assoc_admin.association)
+        return qs.none()
 
 @admin.register(Member)
 class MemberAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
@@ -98,6 +167,9 @@ class MemberAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_filter = ('member_type', 'faculty', 'course')
     search_fields = ("first_name", "last_name", "registration_number")
     ordering = ('-created_at',)
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request)
 
     def has_add_permission(self, request):
         return request.user.is_superuser
@@ -108,6 +180,15 @@ class MemberAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     def has_delete_permission(self, request, obj = None):
         return request.user.is_superuser
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser or self.is_guild_admin(request):
+            return qs
+        if assoc_admin := self.is_association_admin(request):
+            # Show only members who have memberships in this association
+            return qs.filter(memberships__association=assoc_admin.association).distinct()
+        return qs.none()
+
 
 @admin.register(Membership)
 class MembershipAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
@@ -117,6 +198,18 @@ class MembershipAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     ordering = ('-joined_at',)
     autocomplete_fields = ('member', 'association')
 
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request) or self.is_association_admin(request)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
     def get_list_filter(self, request):
         list_filter = super().get_list_filter(request) or tuple()
         if self.is_association_admin(request):
@@ -125,24 +218,30 @@ class MembershipAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
 
     def get_exclude(self, request, obj = None):
         excluded_fields = super().get_exclude(request, obj) or tuple()
-        if request.user.is_superuser:
+        if request.user.is_superuser or self.is_guild_admin(request):
             return excluded_fields
         if self.is_association_admin(request):
             excluded_fields += ("association",)
             return excluded_fields
         return excluded_fields
 
+    def get_list_filter(self, request):
+        list_filter = super().get_list_filter(request) or tuple()
+        if self.is_association_admin(request):
+            return (f for f in list_filter if f != "association")
+        return list_filter
+
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if self.is_superuser(request):
+        if self.is_superuser(request) or self.is_guild_admin(request):
             return qs
         if assoc_admin := self.is_association_admin(request):
             return qs.filter(association=assoc_admin.association)
         return qs.none()
 
     def save_model(self, request, obj, form, change):
-        if not request.user.is_superuser:
+        if not request.user.is_superuser and not self.is_guild_admin(request):
             obj.association = request.user.association_admin.association
         super().save_model(request, obj, form, change)
 
@@ -158,9 +257,21 @@ class CabinetAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('association', 'year')
     search_fields = ("year", )
 
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request) or self.is_association_admin(request)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
     def get_exclude(self, request, obj = None):
         excluded_fields = super().get_exclude(request, obj) or tuple()
-        if request.user.is_superuser:
+        if request.user.is_superuser or self.is_guild_admin(request):
             return excluded_fields
         if hasattr(request.user, "association_admin"):
             excluded_fields += ("association",)
@@ -169,13 +280,28 @@ class CabinetAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser:
+        if request.user.is_superuser or self.is_guild_admin(request):
             return qs
         if assoc_admin := self.is_association_admin(request):
             return qs.filter(association=assoc_admin.association)
         return qs.none()
+
+    def get_list_filter(self, request):
+        list_filter = super().get_list_filter(request) or tuple()
+        if self.is_association_admin(request):
+            return (f for f in list_filter if f != "association")
+        return list_filter
+
+    def get_exclude(self, request, obj = None):
+        excluded_fields = super().get_exclude(request, obj) or tuple()
+        if request.user.is_superuser or self.is_guild_admin(request):
+            return excluded_fields
+        if self.is_association_admin(request):
+            excluded_fields += ("association",)
+            return excluded_fields
+        return excluded_fields
     def save_model(self, request, obj, form, change):
-        if not request.user.is_superuser:
+        if not request.user.is_superuser and not self.is_guild_admin(request):
             obj.association = request.user.association_admin.association
         super().save_model(request, obj, form, change)
 class AssociationListFilter(admin.SimpleListFilter, CheckUserIdentityMixin):
@@ -218,13 +344,25 @@ class CabinetListFilter(admin.SimpleListFilter, CheckUserIdentityMixin):
 class CabinetMemberAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('cabinet', 'member', 'role')
     # search_fields = ('member__full_name', 'cabinet__association__name')
-    list_filter = (CabinetListFilter, 'role')
+    list_filter = ('member', 'role')
     ordering = ('-cabinet__year', 'role')
     autocomplete_fields = ('member', 'cabinet')
 
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser:
+        if request.user.is_superuser or self.is_guild_admin(request):
             return qs
         if assoc_admin := self.is_association_admin(request):
             return qs.filter(cabinet__association=assoc_admin.association)
@@ -237,9 +375,21 @@ class FeeAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_filter = ('fee_type', AssociationListFilter)
     ordering = ('-created_at',)
 
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
     def get_exclude(self, request, obj = None):
         excluded_fields = super().get_exclude(request, obj) or tuple()
-        if request.user.is_superuser:
+        if request.user.is_superuser or self.is_guild_admin(request):
             return excluded_fields
         if self.is_association_admin(request):
             excluded_fields += ("association",)
@@ -248,7 +398,7 @@ class FeeAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser:
+        if request.user.is_superuser or self.is_guild_admin(request):
             return qs
         if assoc_admin := self.is_association_admin(request):
             return qs.filter(association=assoc_admin.association)
@@ -266,8 +416,20 @@ class PaymentAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_filter = ('payment_date',)
     ordering = ('-payment_date',)
 
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_association_admin(request)
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "membership" and not request.user.is_superuser:
+        if db_field.name == "membership" and not request.user.is_superuser and not self.is_guild_admin(request):
             if assoc_admin := self.is_association_admin(request):
                 assoc = assoc_admin.association
                 kwargs["queryset"] = Membership.objects.filter(association=assoc)
@@ -280,7 +442,7 @@ class PaymentAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser:
+        if request.user.is_superuser or self.is_guild_admin(request):
             return qs
         assoc_admin = getattr(request.user, "association_admin", None)
         if assoc_admin:
@@ -295,9 +457,21 @@ class EventAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_filter = (AssociationListFilter, 'event_date')
     ordering = ('-created_at',)
 
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
     def get_exclude(self, request, obj = None):
         excluded_fields = super().get_exclude(request, obj) or tuple()
-        if request.user.is_superuser:
+        if request.user.is_superuser or self.is_guild_admin(request):
             return excluded_fields
         if self.is_association_admin(request):
             excluded_fields += ("association",)
@@ -305,7 +479,7 @@ class EventAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
         return excluded_fields
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "posted_by" and not request.user.is_superuser:
+        if db_field.name == "posted_by" and not request.user.is_superuser and not self.is_guild_admin(request):
             if assoc_admin := self.is_association_admin(request):
                 assoc = assoc_admin.association
                 kwargs["queryset"] = Membership.objects.filter(association=assoc)
@@ -313,7 +487,7 @@ class EventAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser:
+        if request.user.is_superuser or self.is_guild_admin(request):
             return qs
         if assoc_admin := self.is_association_admin(request):
             return qs.filter(association=assoc_admin.association)
@@ -331,9 +505,21 @@ class FeedbackAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_filter = ('association', 'submitted_at')
     ordering = ('-submitted_at',)
 
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
     def get_exclude(self, request, obj = None):
         excluded_fields = super().get_exclude(request, obj) or tuple()
-        if request.user.is_superuser:
+        if request.user.is_superuser or self.is_guild_admin(request):
             return excluded_fields
         if self.is_association_admin(request):
             excluded_fields += ("association",)
@@ -342,7 +528,7 @@ class FeedbackAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser:
+        if request.user.is_superuser or self.is_guild_admin(request):
             return qs
         if assoc_admin := self.is_association_admin(request):
             return qs.filter(association=assoc_admin.association)
