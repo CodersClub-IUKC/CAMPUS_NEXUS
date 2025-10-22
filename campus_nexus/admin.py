@@ -12,6 +12,7 @@ from campus_nexus.models import (
     CabinetMember,
     AssociationAdmin,
     Feedback,
+    Guild,
 )
 
 class CheckUserIdentityMixin:
@@ -21,10 +22,10 @@ class CheckUserIdentityMixin:
 
     def is_association_admin(self, request):
         return getattr(request.user, "association_admin", None)
-    
+
     def is_guild_admin(self, request):
         return getattr(request.user, "guild", None)
-    
+
 
 @admin.register(Guild)
 class GuildAdmin(admin.ModelAdmin):
