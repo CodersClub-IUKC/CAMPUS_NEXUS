@@ -11,7 +11,7 @@ from .views import (
     CabinetListView, CabinetDetailView,
     PaymentListView, PaymentDetailView,
     MembershipListView, MembershipDetailView,
-    FeeListView, FeeDetailView, CabinetMemberListView, CabinetMemberDetailView
+    FeeListView, FeeDetailView, CabinetMemberListView, CabinetMemberDetailView, FeedbackListView, FeedbackDetailView
 )
 
 urlpatterns = [
@@ -54,6 +54,10 @@ urlpatterns = [
     # Fees
     path('fees/', FeeListView.as_view(), name='fee-list'),
     path('fees/<int:pk>/', FeeDetailView.as_view(), name='fee-detail'),
+
+    # Feedback
+    path('feedbacks/', FeedbackListView.as_view(), name='feedback-list'),
+    path('feedbacks/<int:pk>/', FeedbackDetailView.as_view(), name='feedback-detail'),
 ]
 
 # serve media files in dev (images like logos/receipts)

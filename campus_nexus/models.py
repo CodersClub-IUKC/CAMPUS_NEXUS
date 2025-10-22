@@ -3,7 +3,14 @@ from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
-from .theme_utils import get_association_theme
+try:
+    from .theme_utils import get_association_theme
+except Exception:
+    def get_association_theme(association):
+        
+        name = getattr(association, "name", "association")
+        # Minimal default CSS; adjust as needed.
+        return "/* default theme for {} */\n:root {{ --association-name: \"{}\"; }}\n".format(name, name)
 
 
 User = get_user_model()
@@ -54,7 +61,7 @@ class AssociationAdmin(models.Model):
         # Require staff=True so they can log in to admin
         if self.user and not self.user.is_staff:
             raise ValidationError("Association Admins must have is_staff=True to access the admin site.")
-    
+
     def __str__(self):
         return f"{self.user.username} - {self.association.name}"
 
@@ -66,7 +73,7 @@ class Association(models.Model):
     logo_image = models.ImageField(upload_to='associations/logos/', blank=True, null=True)
     theme_css_file = models.FileField(upload_to="associations/themes/", blank=True, null=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     def save(self, *args, **kwargs):
         if self.pk:
             assoc = Association.objects.filter(pk=self.pk).first()
@@ -196,3 +203,13 @@ class Event(models.Model):
 
     def __str__(self):
         return self.title
+
+class Feedback(models.Model):
+    association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name='feedbacks')
+    member = models.ForeignKey(Member, on_delete=models.CASCADE, related_name='feedbacks')
+    subject = models.CharField(max_length=200)
+    message = models.TextField()
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Feedback from {self.member.full_name} - {self.subject}"

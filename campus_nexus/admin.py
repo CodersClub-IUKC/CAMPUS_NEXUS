@@ -11,14 +11,14 @@ from campus_nexus.models import (
     Membership,
     CabinetMember,
     AssociationAdmin,
-    Guild
+    Feedback,
 )
 
 class CheckUserIdentityMixin:
 
     def is_superuser(self, request):
         return request.user.is_superuser
-    
+
     def is_association_admin(self, request):
         return getattr(request.user, "association_admin", None)
     
@@ -94,20 +94,20 @@ class AssociationAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
 @admin.register(Member)
 class MemberAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('full_name', 'email', 'member_type', 'faculty', 'course', 'created_at',)
-    # search_fields = ('full_name', 'email')
+
     list_filter = ('member_type', 'faculty', 'course')
     search_fields = ("first_name", "last_name", "registration_number")
     ordering = ('-created_at',)
 
     def has_add_permission(self, request):
         return request.user.is_superuser
-    
+
     def has_change_permission(self, request, obj = None):
         return request.user.is_superuser
-    
+
     def has_delete_permission(self, request, obj = None):
         return request.user.is_superuser
-    
+
 
 @admin.register(Membership)
 class MembershipAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
@@ -122,7 +122,7 @@ class MembershipAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
         if self.is_association_admin(request):
             return (f for f in list_filter if f != "association")
         return list_filter
-    
+
     def get_exclude(self, request, obj = None):
         excluded_fields = super().get_exclude(request, obj) or tuple()
         if request.user.is_superuser:
@@ -131,6 +131,7 @@ class MembershipAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
             excluded_fields += ("association",)
             return excluded_fields
         return excluded_fields
+
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -165,7 +166,7 @@ class CabinetAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
             excluded_fields += ("association",)
             return excluded_fields
         return excluded_fields
-    
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
@@ -210,7 +211,7 @@ class FeeAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
             excluded_fields += ("association",)
             return excluded_fields
         return excluded_fields
-    
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
@@ -237,7 +238,7 @@ class PaymentAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
                 assoc = assoc_admin.association
                 kwargs["queryset"] = Membership.objects.filter(association=assoc)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-    
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
@@ -263,14 +264,43 @@ class EventAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
             excluded_fields += ("association",)
             return excluded_fields
         return excluded_fields
-    
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "posted_by" and not request.user.is_superuser:
             if assoc_admin := self.is_association_admin(request):
                 assoc = assoc_admin.association
                 kwargs["queryset"] = Membership.objects.filter(association=assoc)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-    
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        if assoc_admin := self.is_association_admin(request):
+            return qs.filter(association=assoc_admin.association)
+        return qs.none()
+
+    def save_model(self, request, obj, form, change):
+        if not request.user.is_superuser:
+            obj.association = request.user.association_admin.association
+        super().save_model(request, obj, form, change)
+
+@admin.register(Feedback)
+class FeedbackAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
+    list_display = ('member', 'association', 'subject', 'message', 'submitted_at')
+    search_fields = ('member', 'message')
+    list_filter = ('association', 'submitted_at')
+    ordering = ('-submitted_at',)
+
+    def get_exclude(self, request, obj = None):
+        excluded_fields = super().get_exclude(request, obj) or tuple()
+        if request.user.is_superuser:
+            return excluded_fields
+        if self.is_association_admin(request):
+            excluded_fields += ("association",)
+            return excluded_fields
+        return excluded_fields
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
