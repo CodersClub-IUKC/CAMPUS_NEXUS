@@ -315,7 +315,7 @@ class AssociationListFilter(admin.SimpleListFilter, CheckUserIdentityMixin):
             assoc = request.user.association_admin.association
             return [(assoc.id, assoc.name)]
         return []
-    
+
     def queryset(self, request, queryset):
         if self.value():
             return queryset.filter(association__id=self.value())
@@ -334,7 +334,7 @@ class CabinetListFilter(admin.SimpleListFilter, CheckUserIdentityMixin):
             cabinets = Cabinet.objects.filter(association=assoc)
             return [(cabinet.id, cabinet.year) for cabinet in cabinets]
         return []
-    
+
     def queryset(self, request, queryset):
         if self.value():
             return queryset.filter(cabinet__id=self.value())
@@ -349,8 +349,7 @@ class CabinetMemberAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     autocomplete_fields = ('member', 'cabinet')
 
     def has_module_permission(self, request):
-        return request.user.is_superuser or self.is_guild_admin(request)
-
+        return request.user.is_superuser or self.is_guild_admin(request) or self.is_association_admin(request)
     def has_add_permission(self, request):
         return request.user.is_superuser or self.is_association_admin(request)
 
@@ -367,7 +366,7 @@ class CabinetMemberAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
         if assoc_admin := self.is_association_admin(request):
             return qs.filter(cabinet__association=assoc_admin.association)
         return qs.none()
-    
+
 @admin.register(Fee)
 class FeeAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('association', 'fee_type', 'amount', 'duration_months', 'created_at')
@@ -376,7 +375,7 @@ class FeeAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     ordering = ('-created_at',)
 
     def has_module_permission(self, request):
-        return request.user.is_superuser or self.is_guild_admin(request)
+        return request.user.is_superuser or self.is_guild_admin(request) or self.is_association_admin(request)
 
     def has_add_permission(self, request):
         return request.user.is_superuser or self.is_association_admin(request)
@@ -417,7 +416,7 @@ class PaymentAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     ordering = ('-payment_date',)
 
     def has_module_permission(self, request):
-        return request.user.is_superuser or self.is_guild_admin(request)
+        return request.user.is_superuser or self.is_guild_admin(request) or self.is_association_admin(request)
 
     def has_add_permission(self, request):
         return request.user.is_superuser or self.is_association_admin(request)
@@ -449,7 +448,7 @@ class PaymentAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
             return qs.filter(membership__association=assoc_admin.association)
         return qs.none()
 
-    
+
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('title', 'association', 'event_date', 'created_at', 'description','venue','posted_by')
@@ -458,16 +457,16 @@ class EventAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     ordering = ('-created_at',)
 
     def has_module_permission(self, request):
-        return request.user.is_superuser or self.is_guild_admin(request)
+        return request.user.is_superuser or self.is_guild_admin(request) or self.is_association_admin(request)
 
     def has_add_permission(self, request):
-        return request.user.is_superuser
+        return request.user.is_superuser or self.is_association_admin(request)
 
     def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return request.user.is_superuser or self.is_association_admin(request)
 
     def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return request.user.is_superuser or self.is_association_admin(request)
 
     def get_exclude(self, request, obj = None):
         excluded_fields = super().get_exclude(request, obj) or tuple()
@@ -506,7 +505,7 @@ class FeedbackAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     ordering = ('-submitted_at',)
 
     def has_module_permission(self, request):
-        return request.user.is_superuser or self.is_guild_admin(request)
+        return request.user.is_superuser or self.is_guild_admin(request) or self.is_association_admin(request)
 
     def has_add_permission(self, request):
         return request.user.is_superuser
