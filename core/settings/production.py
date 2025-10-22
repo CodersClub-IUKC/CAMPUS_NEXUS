@@ -3,10 +3,10 @@ import os
 
 DEBUG = False
 
-ALLOWED_HOSTS = ["yourdomain.com", "www.yourdomain.com", "localhost"]
+ALLOWED_HOSTS = ["*", "localhost"]
 
 # Use environment variable for secret key
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY")
 
 # Use PostgreSQL or your production DB here
 DATABASES = {

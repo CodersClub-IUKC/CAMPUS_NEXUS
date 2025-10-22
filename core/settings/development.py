@@ -5,9 +5,9 @@ ALLOWED_HOSTS = []
 
 # SQLite is fine for dev (already in common)
 # You can add dev-only tools here:
-INSTALLED_APPS += [
-    "debug_toolbar",
-]
+# INSTALLED_APPS += [
+#     "debug_toolbar",
+# ]
 
 DATABASES = {
     "default": {
