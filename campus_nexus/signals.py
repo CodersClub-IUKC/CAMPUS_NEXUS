@@ -4,7 +4,7 @@ from django.db.models.signals import post_save
 from .models import AssociationAdmin, Guild
 
 @receiver(post_save, sender=AssociationAdmin)
-def add_model_permissions(sender, instance: AssociationAdmin, created: bool, **kwargs):
+def add_association_admin_model_permissions(sender, instance: AssociationAdmin, created: bool, **kwargs):
     """
     Ensure that when an AssociationAdmin is created, they are granted all necessary permissions
     for managing association-related models.
@@ -30,11 +30,13 @@ def add_model_permissions(sender, instance: AssociationAdmin, created: bool, **k
             user.user_permissions.add(*perms)
 
 @receiver(post_save, sender=Guild)
-def add_model_permissions(sender, instance: Guild, created: bool, **kwargs):
+def add_guild_model_permissions(sender, instance: Guild, created: bool, **kwargs):
     """
     Ensure that when a Guild is created, its user is granted all necessary permissions
     for managing guild-related models.
     """
+    print("="*100)
+    print(f"Guild signal triggered for {instance.user.username}")
     if created:
         user = instance.user
 
