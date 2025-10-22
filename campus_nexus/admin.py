@@ -21,6 +21,17 @@ class CheckUserIdentityMixin:
 
     def is_association_admin(self, request):
         return getattr(request.user, "association_admin", None)
+    
+    def is_guild_admin(self, request):
+        return getattr(request.user, "guild", None)
+    
+
+@admin.register(Guild)
+class GuildAdmin(admin.ModelAdmin):
+    list_display = ('user',)
+    search_fields = ('user__username',)
+    ordering = ('user__username',)
+    raw_id_fields = ('user',)
 
 @admin.register(AssociationAdmin)
 class AssocationAdminAdmin(admin.ModelAdmin):
@@ -62,7 +73,7 @@ class CourseAdmin(admin.ModelAdmin):
         return request.user.is_superuser
 
 @admin.register(Association)
-class AssociationAdmin(admin.ModelAdmin):
+class AssociationAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('name', 'faculty', 'created_at', 'description',)
     search_fields = ('name',)
     list_filter = ('faculty',)
@@ -75,7 +86,7 @@ class AssociationAdmin(admin.ModelAdmin):
         return request.user.is_superuser
 
     def has_add_permission(self, request):
-        return request.user.is_superuser
+        return request.user.is_superuser or self.is_guild_admin(request)
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
