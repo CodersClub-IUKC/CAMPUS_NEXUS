@@ -26,6 +26,20 @@ class Faculty(models.Model):
     def __str__(self):
         return self.name
 
+class Guild(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='guild', limit_choices_to={'is_staff': True, 'is_superuser': False})
+
+    def clean(self):
+        if self.user and self.user.is_superuser:
+            raise ValidationError("Superusers cannot be assigned as Association Admins.")
+
+        # Require staff=True so they can log in to admin
+        if self.user and not self.user.is_staff:
+            raise ValidationError("Association Admins must have is_staff=True to access the admin site.")
+    
+    def __str__(self):
+        return f"{self.user.username}"
+
 
 class Course(models.Model):
     name = models.CharField(max_length=100)
