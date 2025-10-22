@@ -31,12 +31,12 @@ class Guild(models.Model):
 
     def clean(self):
         if self.user and self.user.is_superuser:
-            raise ValidationError("Superusers cannot be assigned as Association Admins.")
+            raise ValidationError("Superusers cannot be assigned as Guilds.")
 
         # Require staff=True so they can log in to admin
         if self.user and not self.user.is_staff:
-            raise ValidationError("Association Admins must have is_staff=True to access the admin site.")
-    
+            raise ValidationError("Guilds must have is_staff=True to access the admin site.")
+
     def __str__(self):
         return f"{self.user.username}"
 
@@ -145,7 +145,7 @@ class Membership(models.Model):
 
 
 class Cabinet(models.Model):
-   association = models.OneToOneField(Association, on_delete=models.CASCADE, related_name='cabinets')
+   association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name='cabinets')
    year = models.CharField(max_length=10)
 
    def __str__(self):

@@ -178,13 +178,47 @@ class CabinetAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
         if not request.user.is_superuser:
             obj.association = request.user.association_admin.association
         super().save_model(request, obj, form, change)
+class AssociationListFilter(admin.SimpleListFilter, CheckUserIdentityMixin):
+    title = "Association"
 
+    # Parameter for the filter that will be used in the URL query.
+    parameter_name = "association"
+
+    def lookups(self, request, model_admin):
+        if self.is_association_admin(request):
+            assoc = request.user.association_admin.association
+            return [(assoc.id, assoc.name)]
+        return []
+    
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(association__id=self.value())
+        return queryset
+
+
+class CabinetListFilter(admin.SimpleListFilter, CheckUserIdentityMixin):
+    title = "Cabinet"
+
+    # Parameter for the filter that will be used in the URL query.
+    parameter_name = "cabinet"
+
+    def lookups(self, request, model_admin):
+        if self.is_association_admin(request):
+            assoc = request.user.association_admin.association
+            cabinets = Cabinet.objects.filter(association=assoc)
+            return [(cabinet.id, cabinet.year) for cabinet in cabinets]
+        return []
+    
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(cabinet__id=self.value())
+        return queryset
 
 @admin.register(CabinetMember)
 class CabinetMemberAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('cabinet', 'member', 'role')
     # search_fields = ('member__full_name', 'cabinet__association__name')
-    list_filter = ('cabinet', 'role')
+    list_filter = (CabinetListFilter, 'role')
     ordering = ('-cabinet__year', 'role')
     autocomplete_fields = ('member', 'cabinet')
 
@@ -195,12 +229,12 @@ class CabinetMemberAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
         if assoc_admin := self.is_association_admin(request):
             return qs.filter(cabinet__association=assoc_admin.association)
         return qs.none()
-
+    
 @admin.register(Fee)
 class FeeAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('association', 'fee_type', 'amount', 'duration_months', 'created_at')
     # search_fields = ('association__name',)
-    list_filter = ('fee_type', 'association')
+    list_filter = ('fee_type', AssociationListFilter)
     ordering = ('-created_at',)
 
     def get_exclude(self, request, obj = None):
@@ -237,6 +271,11 @@ class PaymentAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
             if assoc_admin := self.is_association_admin(request):
                 assoc = assoc_admin.association
                 kwargs["queryset"] = Membership.objects.filter(association=assoc)
+        if db_field.name == "fee" and not request.user.is_superuser:
+            if assoc_admin := self.is_association_admin(request):
+                assoc = assoc_admin.association
+                kwargs["queryset"] = Fee.objects.filter(association=assoc)
+
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def get_queryset(self, request):
@@ -248,12 +287,12 @@ class PaymentAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
             return qs.filter(membership__association=assoc_admin.association)
         return qs.none()
 
-
+    
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
     list_display = ('title', 'association', 'event_date', 'created_at', 'description','venue','posted_by')
     search_fields = ('name',)
-    list_filter = ('association', 'event_date')
+    list_filter = (AssociationListFilter, 'event_date')
     ordering = ('-created_at',)
 
     def get_exclude(self, request, obj = None):
