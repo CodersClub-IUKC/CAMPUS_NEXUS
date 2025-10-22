@@ -62,26 +62,12 @@ class Command(BaseCommand):
             user.set_password(password)
             for f, v in user_data.items():
                 setattr(user, f, v)
-
-        user.is_staff = True
-        user.is_superuser = False
         user.save()
 
         assoc_admin, created = AssociationAdmin.objects.update_or_create(
             user=user,
             defaults={"association": association}
         )
-
-        # Assign permissions so that these models appear in the sidebar
-        models = [Association, Member, Membership, Cabinet, CabinetMember, Fee, Payment, Event]
-        for model in models:
-            ct = ContentType.objects.get_for_model(model)
-            perms = Permission.objects.filter(content_type=ct)
-            user.user_permissions.add(*perms)
-
-        self.stdout.write(self.style.SUCCESS(
-            f"Granted all model permissions for association-related objects to {getattr(user, User.USERNAME_FIELD)}"
-        ))
 
         if created:
             self.stdout.write(self.style.SUCCESS(
