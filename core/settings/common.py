@@ -152,6 +152,7 @@ JAZZMIN_SETTINGS = {
         "campus_nexus.memberships",
         "campus_nexus.payments",
         "campus_nexus.feedbacks",
+        "campus_nexus.guilds",
     ],
     # Custom icons for side menu apps/models
     "icons": {
@@ -170,6 +171,7 @@ JAZZMIN_SETTINGS = {
         "campus_nexus.membership": "fas fa-id-card",
         "campus_nexus.payment": "fas fa-credit-card",
         "campus_nexus.feedback": "fas fa-comment-dots",
+        "campus_nexus.guild": "fas fa-users",
     },
     # Icons that are used when one is not manually specified
     "default_icon_parents": "fas fa-chevron-circle-right",
