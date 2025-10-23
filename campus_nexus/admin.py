@@ -186,7 +186,8 @@ class MemberAdmin(admin.ModelAdmin, CheckUserIdentityMixin):
             return qs
         if assoc_admin := self.is_association_admin(request):
             # Show only members who have memberships in this association
-            return qs.filter(memberships__association=assoc_admin.association).distinct()
+            #return qs.filter(memberships__association=assoc_admin.association).distinct()
+            return super().get_queryset(request)
         return qs.none()
 
 
