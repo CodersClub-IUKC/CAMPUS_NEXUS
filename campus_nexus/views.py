@@ -20,7 +20,7 @@ from django.http import HttpResponse, HttpResponseForbidden
 from django.views.decorators.csrf import csrf_exempt
 
 # This secret MUST match your GitHub webhook secret
-SECRET = b"mysecretkey"
+SECRET = b"django-insecure-2bvf7*#lntuaw8ga$5vgu8ytb3d(3ct4ir8q-bb27$py%*4_rc"
 
 @csrf_exempt
 def github_deploy(request):
