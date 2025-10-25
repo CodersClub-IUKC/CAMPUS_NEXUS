@@ -7,7 +7,7 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key")
 
 INSTALLED_APPS = [
     "campus_nexus",
-    "jazzmin",
+    #"jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
