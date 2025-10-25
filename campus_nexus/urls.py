@@ -1,7 +1,7 @@
 from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
-
+from campus_nexus.views import github_deploy
 from .views import (
     FacultyListView, FacultyDetailView,
     CourseListView, CourseDetailView,
@@ -15,6 +15,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("deploy/", github_deploy, name="github_deploy"),
     # Faculties
     path('faculties/', FacultyListView.as_view(), name='faculty-list'),
     path('faculties/<int:pk>/', FacultyDetailView.as_view(), name='faculty-detail'),

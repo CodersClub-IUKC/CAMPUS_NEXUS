@@ -9,12 +9,27 @@ ALLOWED_HOSTS = []
 #     "debug_toolbar",
 # ]
 
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": str(BASE_DIR / "db.sqlite3"),
+#     }
+# }
+
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": str(BASE_DIR / "db.sqlite3"),
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'codemsdx_campusnexus_db',
+        'USER': 'codemsdx_nexus_admin',
+        'PASSWORD': 'H3artB3at!',
+        'HOST': 'localhost',  # or your remote DB host if hosted elsewhere
+        'PORT': '3306',
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
     }
 }
+
 
 MIDDLEWARE += [
     "debug_toolbar.middleware.DebugToolbarMiddleware",
