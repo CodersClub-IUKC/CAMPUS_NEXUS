@@ -12,6 +12,39 @@ from campus_nexus.serializers import ( CabinetMemberSerializer,
     CabinetSerializer, PaymentSerializer, EventSerializer, MembershipSerializer, FeeSerializer, FeedbackSerializer
 )
 
+import hmac
+import hashlib
+import subprocess
+import os
+from django.http import HttpResponse, HttpResponseForbidden
+from django.views.decorators.csrf import csrf_exempt
+
+# This secret MUST match your GitHub webhook secret
+SECRET = b"mysecretkey"
+
+@csrf_exempt
+def github_deploy(request):
+    if request.method != "POST":
+        return HttpResponseForbidden("Only POST allowed")
+
+    # Verify GitHub signature
+    header_signature = request.headers.get("X-Hub-Signature-256")
+    if not header_signature:
+        return HttpResponseForbidden("Missing signature")
+
+    sha_name, signature = header_signature.split("=")
+    if sha_name != "sha256":
+        return HttpResponseForbidden("Invalid signature format")
+
+    mac = hmac.new(SECRET, msg=request.body, digestmod=hashlib.sha256)
+    if not hmac.compare_digest(mac.hexdigest(), signature):
+        return HttpResponseForbidden("Invalid signature")
+
+    # Run deploy script asynchronously
+    subprocess.Popen(["/bin/bash", os.path.expanduser("~/your_project_directory/deploy.sh")])
+
+    return HttpResponse("✅ Deployment started", status=200)
+
 
 # Base view with JWT + IsAuthenticated
 class BaseAuthenticatedView:
