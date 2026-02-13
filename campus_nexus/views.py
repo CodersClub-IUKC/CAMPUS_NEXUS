@@ -43,7 +43,7 @@ def github_deploy(request):
     # Run deploy script asynchronously
     subprocess.Popen(["/bin/bash", os.path.expanduser("~/your_project_directory/deploy.sh")])
 
-    return HttpResponse("✅ Deployment started", status=200)
+    return HttpResponse(" Deployment started", status=200)
 
 
 # Base view with JWT + IsAuthenticated

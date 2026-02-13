@@ -38,3 +38,18 @@ def association_logo_url(context):
         return assoc.logo_image.url
 
     return default_logo
+
+
+@register.simple_tag(takes_context=True)
+def association_brand_name(context):
+    request = context.get("request")
+    if not request or not getattr(request, "user", None) or not request.user.is_authenticated:
+        return ""
+
+    assoc_admin = getattr(request.user, "association_admin", None)
+    if assoc_admin and getattr(assoc_admin, "association", None):
+        return assoc_admin.association.name or ""
+
+    return ""
+
+
