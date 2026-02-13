@@ -29,7 +29,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "campus_nexus.middleware.AssociationWhiteLabellingMiddleware",
+    # "campus_nexus.middleware.AssociationWhiteLabellingMiddleware",
 ]
 
 ROOT_URLCONF = "core.urls"
@@ -37,7 +37,7 @@ ROOT_URLCONF = "core.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -98,6 +98,7 @@ JAZZMIN_SETTINGS = {
     "site_logo": "img/CAMPUS_NEXUS.png",
     # Logo to use for login form
     "login_logo": "img/CAMPUS_NEXUS.png",
+    "custom_css": "css/admin_custom.css",
     # CSS classes that are applied to the logo above
     "site_logo_classes": "img-circle",
     # Relative path to a favicon for your site
@@ -123,7 +124,7 @@ JAZZMIN_SETTINGS = {
             "url": "admin:auth_user_change",  # Links to current user change form
             "icon": "fas fa-user",
         },
-        {"name": "Log out", "url": "admin:logout", "icon": "fas fa-sign-out-alt"},
+        
     ],
     #############
     # Side Menu #
@@ -137,28 +138,33 @@ JAZZMIN_SETTINGS = {
     # Hide these models when generating side menu
     "hide_models": [],
     # List of apps (and models) to base side menu ordering off of
+
     "order_with_respect_to": [
         "auth",
         "campus_nexus",
-        "campus_nexus.associationadmins",
-        "campus_nexus.associations",
-        "campus_nexus.cabinet_members",
-        "campus_nexus.cabinets",
-        "campus_nexus.courses",
-        "campus_nexus.events",
-        "campus_nexus.faculties",
-        "campus_nexus.fees",
-        "campus_nexus.members",
-        "campus_nexus.memberships",
-        "campus_nexus.payments",
-        "campus_nexus.feedbacks",
-        "campus_nexus.guilds",
+        "campus_nexus.associationadmin",
+        "campus_nexus.association",
+        "campus_nexus.cabinet_member",
+        "campus_nexus.cabinet",
+        "campus_nexus.course",
+        "campus_nexus.event",
+        "campus_nexus.faculty",
+        "campus_nexus.fee",
+        "campus_nexus.guildcabinet",
+        "campus_nexus.guildminister",
+        "campus_nexus.guildannou"
+        "campus_nexus.member",
+        "campus_nexus.membership",
+        "campus_nexus.payment",
+        "campus_nexus.feedback",
+        "campus_nexus.guild",
+        "campus_nexus.dean"
     ],
     # Custom icons for side menu apps/models
     "icons": {
         "auth": "fas fa-users-cog",
-        "auth.user": "fas fa-user",
-        "auth.Group": "fas fa-users",
+        "auth.user": "fas fa-user", 
+        "auth.group": "fas fa-users",
         "campus_nexus.associationadmin": "fas fa-user-shield",
         "campus_nexus.association": "fas fa-university",
         "campus_nexus.cabinetmember": "fas fa-user-tie",
@@ -167,6 +173,9 @@ JAZZMIN_SETTINGS = {
         "campus_nexus.event": "fas fa-calendar-alt",
         "campus_nexus.faculty": "fas fa-chalkboard-teacher",
         "campus_nexus.fee": "fas fa-dollar-sign",
+        "campus_nexus.guildcabinet": "fas fa-users-cog",
+        "campus_nexus.guildminister": "fas fa-user-tie",
+        "campus_nexus.guildannou": "fas fa-bullhorn",
         "campus_nexus.member": "fas fa-user-friends",
         "campus_nexus.membership": "fas fa-id-card",
         "campus_nexus.payment": "fas fa-credit-card",
@@ -191,16 +200,20 @@ JAZZMIN_SETTINGS = {
 
 # UI Tweaks for colors and theme
 JAZZMIN_UI_TWEAKS = {
+    "theme": "flatly",
     "navbar_small_text": False,
     "footer_small_text": False,
     "navbar_fixed": True,
     "footer_fixed": False,
     "sidebar_fixed": True,
     "sidebar_disable_expand": False,
-    "sidebar_nav_child_indent": False,
+    "sidebar_nav_child_indent": True,
     "sidebar_nav_compact_style": False,
     "sidebar_nav_legacy_style": False,
-    "sidebar_nav_flat_style": False,
+    "sidebar_nav_flat_style": True,
+    "body_small_text": False,
+    "footer_small_text": True,
+    "navbar_small_text": False,
     "button_classes": {
         "primary": "btn-primary",
         "secondary": "btn-secondary",
