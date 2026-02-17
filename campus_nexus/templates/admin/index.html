@@ -1,0 +1,200 @@
+{% extends "admin/index.html" %}
+{% load i18n static dashboard_tags %}
+
+{% block content %}
+
+  {# ---------- DEAN DASHBOARD ---------- #}
+  {% if request.user.is_authenticated and request.user.dean %}
+
+    {% dean_dashboard_data as d %}
+
+    <div class="content">
+      <div class="container-fluid">
+
+        <div class="mb-3">
+          <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
+
+          <div class="mt-2 mb-2" style="opacity:.85;">
+            <strong>Top association by members:</strong>
+            {{ d.top_assoc_name }} — {{ d.top_assoc_members }} members ({{ d.top_assoc_percent }}%)
+          </div>
+
+          <div style="opacity:.75;">
+            Here’s your Campus Nexus overview across all associations.
+          </div>
+        </div>
+
+        {# --- Summary cards --- #}
+        <div class="row">
+          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
+            <div class="card shadow-sm h-100">
+              <div class="card-body">
+                <div style="opacity:.7;">Total Associations</div>
+                <div style="font-size:28px; font-weight:800;">{{ d.total_associations }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
+            <div class="card shadow-sm h-100">
+              <div class="card-body">
+                <div style="opacity:.7;">Total Members (unique)</div>
+                <div style="font-size:28px; font-weight:800;">{{ d.total_members }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
+            <div class="card shadow-sm h-100">
+              <div class="card-body">
+                <div style="opacity:.7;">Total Payments</div>
+                <div style="font-size:28px; font-weight:800;">{{ d.total_payments }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
+            <div class="card shadow-sm h-100">
+              <div class="card-body">
+                <div style="opacity:.7;">Total Amount Collected</div>
+                <div style="font-size:28px; font-weight:800;">{{ d.total_amount_collected }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# --- Charts row 1 --- #}
+        <div class="row">
+          <div class="col-lg-4 col-md-12 mb-3">
+            <div class="card shadow-sm h-100">
+              <div class="card-body">
+                <div class="mb-2" style="font-weight:700;">Members by Association</div>
+                <canvas id="membersByAssocChart" height="180"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-12 mb-3">
+            <div class="card shadow-sm h-100">
+              <div class="card-body">
+                <div class="mb-2" style="font-weight:700;">Collections by Association</div>
+                <canvas id="paymentsByAssocChart" height="180"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-12 mb-3">
+            <div class="card shadow-sm h-100">
+              <div class="card-body">
+                <div class="mb-2" style="font-weight:700;">Events by Association</div>
+                <canvas id="eventsByAssocChart" height="180"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# --- Charts row 2: Member type distribution --- #}
+        <div class="row">
+          <div class="col-lg-6 col-md-12 mb-3">
+            <div class="card shadow-sm h-100">
+              <div class="card-body">
+                <div class="mb-2" style="font-weight:700;">Member Type Distribution</div>
+                <canvas id="memberTypeChart" height="180"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# Links (quick navigation) #}
+        <div class="row">
+          <div class="col-12 mb-3">
+            <div class="card shadow-sm">
+              <div class="card-body">
+                <div class="d-flex flex-wrap" style="gap:12px;">
+                  <a class="btn btn-primary px-3 py-2" href="{% url 'admin:campus_nexus_association_changelist' %}">View Associations</a>
+                  <a class="btn btn-outline-primary px-3 py-2" href="{% url 'admin:campus_nexus_member_changelist' %}">View Members</a>
+                  <a class="btn btn-outline-primary px-3 py-2" href="{% url 'admin:campus_nexus_membership_changelist' %}">View Memberships</a>
+                  <a class="btn btn-outline-primary px-3 py-2" href="{% url 'admin:campus_nexus_payment_changelist' %}">View Payments</a>
+                  <a class="btn btn-outline-primary px-3 py-2" href="{% url 'admin:campus_nexus_event_changelist' %}">View Events</a>
+                  <a class="btn btn-outline-primary px-3 py-2" href="{% url 'admin:campus_nexus_cabinet_changelist' %}">View Cabinets</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    {# Chart.js #}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+      const membersLabels = {{ d.members_by_association.labels|safe }};
+      const membersData   = {{ d.members_by_association.data|safe }};
+      const membersPct    = {{ d.members_by_association.percent|safe }};
+
+      const payLabels = {{ d.payments_by_association.labels|safe }};
+      const payData   = {{ d.payments_by_association.data|safe }};
+
+      const evLabels = {{ d.events_by_association.labels|safe }};
+      const evData   = {{ d.events_by_association.data|safe }};
+
+      const typeLabels = {{ d.member_type_distribution.labels|safe }};
+      const typeData   = {{ d.member_type_distribution.data|safe }};
+      const typePct    = {{ d.member_type_distribution.percent|safe }};
+
+      new Chart(document.getElementById("membersByAssocChart"), {
+        type: "bar",
+        data: { labels: membersLabels, datasets: [{ label: "Members", data: membersData }] },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const i = ctx.dataIndex;
+                  return `Members: ${membersData[i]} (${membersPct[i]}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+
+      new Chart(document.getElementById("paymentsByAssocChart"), {
+        type: "doughnut",
+        data: { labels: payLabels, datasets: [{ label: "Amount", data: payData }] },
+        options: { responsive: true }
+      });
+
+      new Chart(document.getElementById("eventsByAssocChart"), {
+        type: "bar",
+        data: { labels: evLabels, datasets: [{ label: "Events", data: evData }] },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+      });
+
+      new Chart(document.getElementById("memberTypeChart"), {
+        type: "doughnut",
+        data: { labels: typeLabels, datasets: [{ label: "Members", data: typeData }] },
+        options: {
+          responsive: true,
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const i = ctx.dataIndex;
+                  return `${typeLabels[i]}: ${typeData[i]} (${typePct[i]}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    </script>
+
+  {% else %}
+    {{ block.super }}
+  {% endif %}
+
+{% endblock %}

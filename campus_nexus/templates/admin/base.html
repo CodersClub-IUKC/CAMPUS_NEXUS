@@ -2,22 +2,170 @@
 {% load static jazzmin association_tags %}
 {% get_jazzmin_settings request as jazzmin_settings %}
 
-
 {% block extrahead %}
 {{ block.super }}
 
 <link rel="stylesheet" href="{% association_css_url %}">
-
 {% endblock %}
 
 {% block extrajs %}
 <script>
-    const associationLogoUrl = "{% association_logo_url %}";
-    
-    const brandImg = document.querySelector('#jazzy-logo > img');
-    if (brandImg && associationLogoUrl) {
-        brandImg.src = associationLogoUrl;
-    }
-</script>
+    // Association admin context (no extra tag needed)
+    let associationBrandName = "";
+    {% if request.user.is_authenticated and request.user.association_admin and request.user.association_admin.association %}
+        associationBrandName = "{{ request.user.association_admin.association.name|escapejs }}";
+    {% endif %}
 
+    // Your existing tag (works)
+    const associationLogoUrl = "{% association_logo_url %}";
+
+    // ============================================================
+    // 1) Change ONLY the TOP navbar brand (Campus Nexus ▼)
+    //    Keep SIDEBAR brand untouched
+    // ============================================================
+    function findTopNavbarBrand() {
+        const nav = document.querySelector("nav.main-header.navbar, nav.navbar");
+        if (!nav) return null;
+
+        const candidates = Array.from(nav.querySelectorAll("a.navbar-brand, a.brand-link, a.dropdown-toggle"));
+        const byText = candidates.find(a => (a.textContent || "").toLowerCase().includes("campus nexus"));
+        return byText || candidates[0] || null;
+    }
+
+    const topBrand = findTopNavbarBrand();
+
+    if (topBrand && associationBrandName) {
+        const caretEl = topBrand.querySelector("i.fas.fa-angle-down, i.fa-angle-down, .fa-angle-down");
+        const caretHTML = caretEl ? caretEl.outerHTML : "";
+
+        topBrand.innerHTML = "";
+
+        if (associationLogoUrl) {
+            const img = document.createElement("img");
+            img.src = associationLogoUrl;
+            img.alt = "Association logo";
+            img.style.height = "22px";
+            img.style.width = "22px";
+            img.style.objectFit = "cover";
+            img.style.borderRadius = "6px";
+            img.style.marginRight = "8px";
+            topBrand.appendChild(img);
+        }
+
+        const span = document.createElement("span");
+        span.textContent = associationBrandName;
+        span.style.fontWeight = "700";
+        span.style.whiteSpace = "nowrap";
+        topBrand.appendChild(span);
+
+        if (caretHTML) topBrand.insertAdjacentHTML("beforeend", " " + caretHTML);
+    }
+
+    // ============================================================
+    // 2) Global search bar (centered) with a target selector
+    //    "Search everything" = user chooses which model to search
+    // ============================================================
+
+    function addCenteredGlobalSearch() {
+        const nav = document.querySelector("nav.main-header.navbar, nav.navbar");
+        if (!nav) return;
+
+        // Avoid duplicates
+        if (nav.querySelector("#cnx-global-search")) return;
+
+        // AdminLTE navbar is flex; we can insert a center container
+        const centerWrap = document.createElement("div");
+        centerWrap.id = "cnx-global-search";
+        centerWrap.style.flex = "1";
+        centerWrap.style.display = "flex";
+        centerWrap.style.justifyContent = "center";
+        centerWrap.style.alignItems = "center";
+
+        // Put it after the left nav list (so it sits in the middle)
+        const leftNav = nav.querySelector("ul.navbar-nav");
+        if (!leftNav) return;
+
+        // Create the form UI
+        centerWrap.innerHTML = `
+  <form id="cnx-global-search-form" method="GET" action="/admin/campus_nexus/member/"
+        style="display:flex;align-items:center;gap:12px;width:min(820px, 75vw);">
+
+    <select id="cnx-search-target" class="form-control"
+            style="
+              height:42px;
+              line-height:42px;
+              padding:0 10px;
+              border-radius:12px;
+              max-width:190px;
+            ">
+      <option value="/admin/campus_nexus/member/" selected>Members</option>
+      <option value="/admin/campus_nexus/membership/">Memberships</option>
+      <option value="/admin/campus_nexus/payment/">Payments</option>
+      <option value="/admin/campus_nexus/event/">Events</option>
+      <option value="/admin/campus_nexus/fee/">Fees</option>
+      <option value="/admin/campus_nexus/cabinet/">Cabinets</option>
+      <option value="/admin/campus_nexus/cabinetmember/">Cabinet Members</option>
+    </select>
+
+    <input type="text" name="q" placeholder="Search..."
+           class="form-control"
+           style="
+             height:42px;
+             line-height:42px;
+             padding:0 14px;
+             border-radius:12px;
+             flex:1;
+             min-width:300px;
+           " />
+
+    <button type="submit" class="btn btn-primary"
+            style="
+              height:42px;
+              padding:0 18px;
+              border-radius:12px;
+              min-width:110px;
+              font-weight:600;
+              display:flex;
+              align-items:center;
+            ">
+      Search
+    </button>
+  </form>
+`;
+
+
+        // Insert centerWrap right after leftNav
+        leftNav.parentNode.insertBefore(centerWrap, leftNav.nextSibling);
+
+        // Update form action when target changes
+        const form = document.querySelector("#cnx-global-search-form");
+        const target = document.querySelector("#cnx-search-target");
+
+        if (form && target) {
+            target.addEventListener("change", () => {
+                form.action = target.value;
+            });
+        }
+    }
+
+    addCenteredGlobalSearch();
+    
+    {% if request.user.is_authenticated and request.user.dean %}
+<script>
+  // Hide add buttons + inline add rows for dean everywhere
+  const selectors = [
+    ".object-tools .addlink",
+    ".object-tools a[href$='/add/']",
+    "a.addlink",
+    ".add-row",
+    ".submit-row input[name='_addanother']",
+    ".submit-row input[name='_continue']"
+  ];
+  selectors.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => el.style.display = "none");
+  });
+</script>
+{% endif %}
+
+</script>
 {% endblock %}
