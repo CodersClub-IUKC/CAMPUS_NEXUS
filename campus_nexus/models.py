@@ -174,49 +174,54 @@ class Member(models.Model):
         return f"{self.full_name} ({self.registration_number})"  
   
   
+from django.db import models
+from django.utils import timezone
+from django.core.exceptions import ValidationError
+
 class Membership(models.Model):
     STATUS_CHOICES = [
-        ('active', 'Active'),
-        ('pending', 'Pending'),
+        ("active", "Active"),
+        ("inactive", "Inactive"),
+        ("suspended", "Suspended"),
     ]
 
-    member = models.ForeignKey(Member, on_delete=models.CASCADE, related_name='memberships')
-    association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name='memberships')
+    member = models.ForeignKey(Member, on_delete=models.CASCADE, related_name="memberships")
+    association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name="memberships")
     joined_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES)
-    
+
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="active")
+
+    subscription_anchor_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Start date used to calculate subscription cycles. Leave blank to use today.",
+    )
+
     class Meta:
         constraints = [
-            models.UniqueConstraint(
-                fields=["member", "association"],
-                name="unique_member_per_association",
-            )
+            models.UniqueConstraint(fields=["member", "association"], name="unique_member_per_association")
         ]
-        
-    from django.core.exceptions import ValidationError
 
     def clean(self):
         super().clean()
 
-        # Guard: during admin add, association might not yet be attached
         if not self.association_id:
-            # If you want to allow admin form to set it later, do NOT raise here.
-            # But for safety + correctness, it's better to raise a validation error.
             raise ValidationError({"association": "Association is required."})
 
-        # Only enforce rule for faculty-based associations
+        # Auto default anchor date on create (keeps your logic consistent)
+        if not self.pk and not self.subscription_anchor_date:
+            self.subscription_anchor_date = timezone.localdate()
+
         assoc = self.association
         if not assoc.faculty_id:
             return
 
         existing = (
-            Membership.objects
-            .filter(member=self.member, association__faculty__isnull=False)
+            Membership.objects.filter(member=self.member, association__faculty__isnull=False)
             .exclude(pk=self.pk)
             .select_related("association__faculty")
         )
 
-        # If member already has a faculty-based membership with a different faculty, block it
         for m in existing:
             if m.association.faculty_id != assoc.faculty_id:
                 raise ValidationError({
@@ -227,6 +232,10 @@ class Membership(models.Model):
                     )
                 })
 
+    def save(self, *args, **kwargs):
+        if not self.subscription_anchor_date:
+            self.subscription_anchor_date = timezone.localdate()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.member.full_name} → {self.association.name}"
@@ -257,12 +266,27 @@ class Fee(models.Model):
 
     association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name='fees')
     fee_type = models.CharField(max_length=20, choices=FEE_TYPE_CHOICES)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    duration_months = models.PositiveIntegerField()
-    created_at = models.DateTimeField(auto_now_add=True)
 
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    duration_months = models.PositiveIntegerField(default=0)
+
+    # enforcement per association policy 
+    grace_days = models.PositiveIntegerField(default=0)
+    reminder_days_before_due = models.JSONField(default=list, blank=True)  # e.g. [14, 3]
+    max_missed_cycles = models.PositiveIntegerField(default=2)  
+    created_at = models.DateTimeField(auto_now_add=True)
+    allow_installments = models.BooleanField(default=True)
+    
+    def save(self, *args, **kwargs):
+        if self.fee_type == "subscription":
+            self.reminder_days_before_due = [3]
+        else:
+            self.reminder_days_before_due = []
+        super().save(*args, **kwargs)
+        
     def __str__(self):
-        return f"{self.fee_type} - {self.amount}"
+        return f"{self.association.name} - {self.get_fee_type_display()} Fee - {self.amount}"
+
 
 class Charge(models.Model):
     PURPOSE_CHOICES = [
@@ -298,6 +322,16 @@ class Charge(models.Model):
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_charges")
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    period_start = models.DateField(null=True, blank=True)
+    period_end = models.DateField(null=True, blank=True)
+    is_overdue = models.BooleanField(default=False)
+    
+    @property
+    def balance(self):
+        paid = self.amount_paid_total
+        remaining = self.amount_due - paid
+        return remaining if remaining > 0 else 0
 
     def clean(self):
         # Ensure membership matches association
@@ -327,6 +361,14 @@ class Charge(models.Model):
             self.status = "partial"
         else:
             self.status = "paid"
+            
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["membership", "fee", "period_start", "period_end"],
+                name="uniq_charge_per_cycle",
+            )
+        ]
 
     def __str__(self):
         label = self.title or self.get_purpose_display()
@@ -344,7 +386,7 @@ class Payment(models.Model):
         ("other", "Other"),
     ]
 
-    charge = models.ForeignKey(Charge, on_delete=models.CASCADE, related_name="payments")
+    charge = models.ForeignKey(Charge, on_delete=models.CASCADE, related_name="payments", null=True, blank=True)
     membership = models.ForeignKey(Membership, on_delete=models.CASCADE, related_name="payments")
 
     # Optional: keep fee for backward compatibility / reporting
@@ -383,6 +425,40 @@ class Payment(models.Model):
     def __str__(self):
         return f"{self.membership.member.full_name} - {self.amount_paid}"
 
+class PaymentReminderLog(models.Model):
+    REMINDER_TYPES = [
+        ("before_due", "Before Due"),
+        ("overdue", "Overdue"),
+        ("final_warning", "Final Warning"),
+    ]
+
+    membership = models.ForeignKey(
+        "campus_nexus.Membership",
+        on_delete=models.CASCADE,
+        related_name="reminder_logs",
+    )
+    charge = models.ForeignKey(
+        "campus_nexus.Charge",
+        on_delete=models.CASCADE,
+        related_name="reminder_logs",
+    )
+
+    reminder_type = models.CharField(max_length=30, choices=REMINDER_TYPES)
+    scheduled_for = models.DateField()
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["charge", "reminder_type", "scheduled_for"],
+                name="unique_reminder_per_charge_per_day",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.membership} | {self.charge} | {self.reminder_type} @ {self.scheduled_for}"
+
+
 class Event(models.Model):
     association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name='events')
     title = models.CharField(max_length=200)
@@ -418,8 +494,6 @@ class Feedback(models.Model):
         who = self.member.full_name if self.member else (self.submitted_by.username if self.submitted_by else "Unknown")
         return f"Feedback from {who} - {self.subject}"
 
-from django.db import models
-from django.core.exceptions import ValidationError
 
 class GuildCabinet(models.Model):
     year = models.CharField(max_length=10)
@@ -509,21 +583,71 @@ class GuildExecutive(models.Model):
             return f"{self.get_position_type_display()} of {self.ministry} - {self.member.full_name}"
         return f"{self.get_position_type_display()} - {self.member.full_name}"
 
+class Announcement(models.Model):
+    AUDIENCE_CHOICES = [
+        ("all", "Everyone"),
+        ("association", "Specific Association"),
+        ("faculty", "Specific Faculty"),
+        ("guild", "Guild-wide"),
+    ]
 
-
-class GuildAnnouncement(models.Model):
     title = models.CharField(max_length=200)
     message = models.TextField()
-    cabinet = models.ForeignKey(GuildCabinet, on_delete=models.SET_NULL, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+
+    audience = models.CharField(max_length=20, choices=AUDIENCE_CHOICES, default="all")
+
+    # Optional targeting
+    association = models.ForeignKey(
+        "Association",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="announcements",
+    )
+    faculty = models.ForeignKey(
+        "Faculty",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="announcements",
+    )
+    cabinet = models.ForeignKey(
+        "GuildCabinet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="announcements",
+    )
     is_published = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # Track who posted (any staff user)
     posted_by = models.ForeignKey(
-        GuildExecutive, on_delete=models.SET_NULL, null=True, blank=True, related_name="announcements"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="posted_announcements",
     )
 
     class Meta:
         ordering = ("-created_at",)
 
+    def clean(self):
+        super().clean()
+
+        # enforce targeting consistency
+        if self.audience == "association" and not self.association_id:
+            raise ValidationError({"association": "Select an association for this audience."})
+
+        if self.audience == "faculty" and not self.faculty_id:
+            raise ValidationError({"faculty": "Select a faculty for this audience."})
+
+        # prevent accidental conflicts
+        if self.audience == "association":
+            self.faculty = None
+        if self.audience == "faculty":
+            self.association = None
+
     def __str__(self):
         return self.title
-
