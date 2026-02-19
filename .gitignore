@@ -2,6 +2,7 @@
 .nexusenv/
 venv/
 env/
+.venv/
 
 # Python bytecode
 __pycache__/
