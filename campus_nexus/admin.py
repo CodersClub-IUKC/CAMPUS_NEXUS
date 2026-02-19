@@ -11,7 +11,7 @@ from django.db import transaction
 from django.utils.html import format_html
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
-from django.urls import path
+from django.urls import path, resolve
 from datetime import timedelta
 
 from campus_nexus.models import *
@@ -501,22 +501,33 @@ class AssociationModelAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 
 @admin.register(Member)
 class MemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
-    search_fields = ("registration_number", "email", "phone", "first_name", "last_name")
+    search_fields = ("registration_number", "email", "phone", "first_name", "last_name", "national_id_number")
     list_display = ("first_name", "last_name", "registration_number", "email", "phone", "member_type")
     readonly_fields = ("created_at", "created_by", "created_in_association")
     ordering = ("first_name", "last_name")
     list_filter = ("member_type", "faculty", "course")
 
     def has_module_permission(self, request):
-        return (
-            request.user.is_superuser
-            or self.is_guild_admin(request)
-            or self.is_dean(request)
-            or self.is_association_admin(request)
-        )
+        if request.user.is_superuser:
+            return True
+        return hasattr(request.user, "guild") or hasattr(request.user, "dean")
 
     def has_view_permission(self, request, obj=None):
-        return self.has_module_permission(request)
+        if request.user.is_superuser or hasattr(request.user, "guild") or hasattr(request.user, "dean"):
+            return True
+        
+        try:
+            match = resolve(request.path_info)
+            if match.url_name == "autocomplete":
+                app_label = request.GET.get("app_label")
+                model_name = request.GET.get("model_name")
+                field_name = request.GET.get("field_name")
+                if app_label == "campus_nexus" and model_name == "membership" and field_name == "member":
+                    return True
+        except Exception:
+            pass
+        
+        return False
 
     def has_add_permission(self, request):
         return request.user.is_superuser or self.is_guild_admin(request)
@@ -528,7 +539,6 @@ class MemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         return request.user.is_superuser or self.is_guild_admin(request)
 
     # Filter autocomplete ONLY for CabinetMember.member
-    #    (But do NOT block member browsing / membership assignment)
     def get_search_results(self, request, queryset, search_term):
         queryset, use_distinct = super().get_search_results(request, queryset, search_term)
 

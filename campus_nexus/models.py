@@ -164,7 +164,6 @@ class Member(models.Model):
         return f"{self.first_name} {self.last_name}"
 
     def clean(self):
-        from django.core.exceptions import ValidationError
         if self.member_type in ['student', 'alumni'] and not self.registration_number:
             raise ValidationError("Registration number is required for students and alumni.")
         if self.member_type == 'external' and not self.national_id_number:
@@ -172,11 +171,6 @@ class Member(models.Model):
 
     def __str__(self):
         return f"{self.full_name} ({self.registration_number})"  
-  
-  
-from django.db import models
-from django.utils import timezone
-from django.core.exceptions import ValidationError
 
 class Membership(models.Model):
     STATUS_CHOICES = [
