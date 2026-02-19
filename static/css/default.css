@@ -1,0 +1,233 @@
+/* General text color for better readability */
+body,
+.content,
+.model-fee,
+.model-fee th,
+.model-fee td {
+    color: #000000 !important;
+    /* Black text */
+    background-color: #fbfbfc !important;
+    /* User specified color for .content */
+    font-weight: 500 !important;
+    /* Increased font weight for better readability */
+}
+
+/* Increase font size for content with border-bottom and margin-bottom */
+.content.border-bottom.mb-2 {
+    font-size: 1.1rem !important;
+    /* Increased font size */
+}
+
+/* Increase font size for row class and its placeholders */
+.row {
+    font-size: 1.1rem !important;
+    /* Increased font size */
+}
+
+.row *::placeholder {
+    font-size: 1.1rem !important;
+    /* Increased font size for placeholders */
+}
+
+/* Navbar and section below navbar placeholders and content */
+.navbar,
+.navbar *::placeholder,
+.content-wrapper {
+    font-weight: 700 !important;
+    /* Bold font weight for navbar content */
+}
+
+/* Sidebar styling with user specified color */
+.sidebar-dark-primary {
+    background-color: #232428ff !important;
+    /* User specified dark color */
+    color: #ffffffff !important;
+    /* White text */
+    font-weight: 600 !important;
+    /* Emphasized font weight */
+}
+
+/* Brand link background color */
+.brand-link {
+    background-color: #232428ff !important;
+    /* User specified dark color */
+}
+
+/* Sidebar links */
+.sidebar-dark-primary a {
+    color: #ffffffff !important;
+    /* White text */
+    font-weight: 600 !important;
+    /* Emphasized font weight */
+}
+
+/* Navbar background color */
+.navbar-primary {
+    background-color: #232428ff !important;
+    /* User specified dark color */
+    color: #ffffffff !important;
+    /* White text */
+    font-weight: 600 !important;
+    /* Emphasized font weight */
+}
+
+/* Navbar text */
+.navbar-primary .navbar-nav .nav-link,
+.navbar-primary .navbar-brand {
+    color: #ffffffff !important;
+    /* White text */
+    font-weight: 600 !important;
+    /* Emphasized font weight */
+}
+
+/* Links outside sidebar should be black */
+a,
+a:hover,
+a:focus,
+a:active {
+    color: #000000 !important;
+    /* Black links */
+}
+
+/* Other backgrounds to match navbar */
+body,
+.content-wrapper {
+    background-color: #eaedfeff !important;
+    /* Light pastel blue background below cards */
+    color: #000000 !important;
+    /* Black text */
+    font-weight: 400 !important;
+    /* Normal font weight */
+}
+
+/* Cards and card body keep white background */
+.card,
+.card-body {
+    background-color: #ffffffff !important;
+    /* Full white background */
+    color: #000000 !important;
+    /* Black text */
+    font-weight: 600 !important;
+    /* Increased font weight for better visibility */
+    border-radius: 12px !important;
+    /* Rounded card borders */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
+    /* Subtle shadow */
+}
+
+/* Tags and status labels with pastel colors */
+.label-info,
+.tag-info {
+    background-color: #d0e7ff !important;
+    /* Light pastel blue */
+    color: #3178c6 !important;
+    /* Darker blue text */
+}
+
+.label-success,
+.tag-success {
+    background-color: #d4edda !important;
+    /* Light pastel green */
+    color: #155724 !important;
+    /* Darker green text */
+}
+
+.label-warning,
+.tag-warning {
+    background-color: #fff3cd !important;
+    /* Light pastel yellow */
+    color: #856404 !important;
+    /* Darker yellow text */
+}
+
+.label-danger,
+.tag-danger {
+    background-color: #f8d7da !important;
+    /* Light pastel red */
+    color: #721c24 !important;
+    /* Darker red text */
+}
+
+/* Fix Fees page first column text visibility */
+.model-fee .field-association,
+.model-fee .field-fee_type,
+.model-fee .field-amount,
+.model-fee .field-duration_months,
+.model-fee .field-created_at {
+    color: #000000 !important;
+    /* Black text */
+}
+
+/* Table header text color */
+.model-fee thead th {
+    color: #000000 !important;
+    /* Black text */
+}
+
+/* Buttons and call to actions with user specified blue color */
+.btn-primary,
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn,
+.btn:hover,
+.btn:focus,
+.btn:active {
+    background-color: #005fc3ff !important;
+    border-color: #005fc3ff !important;
+    color: #ffffff !important;
+    border-radius: 12px !important;
+    /* Rounded borders */
+    padding: 10px 20px !important;
+    /* Increased padding for size */
+    font-size: 1rem !important;
+    /* Larger font size */
+    font-weight: 500 !important;
+    /* Increased font weight */
+}
+
+/* Cards inputs and form controls */
+.card input,
+.card select,
+.card textarea,
+.form-control {
+    border-radius: 12px !important;
+    /* Rounded borders */
+    padding: 10px 15px !important;
+    /* Increased padding */
+    font-size: 1rem !important;
+    /* Larger font size */
+}
+
+/* Dropdown menus with rounded borders */
+.dropdown-menu {
+    border-radius: 12px !important;
+    /* Rounded borders */
+}
+
+/* Custom tag colors for high, mid, low */
+.tag-high {
+    background-color: #fee8eaff !important;
+    /* Light red/pink */
+    color: #721c24 !important;
+    /* Dark red text */
+}
+
+.tag-mid {
+    background-color: #fcf9ebff !important;
+    /* Light cream/yellow */
+    color: #856404 !important;
+    /* Dark yellow text */
+}
+
+.tag-low {
+    background-color: #eaedfeff !important;
+    /* Light pastel blue */
+    color: #3178c6 !important;
+    /* Dark blue text */
+}
+
+/* Add gap to btn-group float-right */
+.btn-group.float-right {
+    gap: 10px !important;
+}

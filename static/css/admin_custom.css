@@ -1,0 +1,23 @@
+/* ================================
+   Login page logo
+================================ */
+.login-logo img,
+.login-logo .brand-image,
+.login-box .brand-image {
+    border-radius: 50% !important;
+    object-fit: cover;
+    transform: scale(1.25);  
+}
+
+
+/* Hide inline "original" column (often looks like an ID column) */
+.inline-group .tabular th.original,
+.inline-group .tabular td.original {
+  display: none !important;
+}
+
+/* Make inline tables align cleaner */
+.inline-group .tabular td,
+.inline-group .tabular th {
+  vertical-align: middle !important;
+}
