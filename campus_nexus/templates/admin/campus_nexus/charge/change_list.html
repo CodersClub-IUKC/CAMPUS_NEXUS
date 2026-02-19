@@ -1,0 +1,22 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools %}
+  <div class="object-tools">
+    <ul class="object-tools">
+
+      {# One clear button: overdue reminders only #}
+      <li>
+        <a class="button btn btn-primary"
+           href="{% url 'admin:campus_nexus_charge_send_reminders' %}?scope=overdue"
+           onclick="return confirm('Confirm: Send subscription reminders to ALL members with overdue subscriptions?');">
+          Send reminders (Overdue)
+        </a>
+      </li>
+
+      {# Keep default object tools (like Add) if user has permission #}
+      {{ block.super }}
+
+    </ul>
+  </div>
+{% endblock %}

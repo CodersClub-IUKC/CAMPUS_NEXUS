@@ -1,0 +1,215 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .cn-card {
+      border-radius: 14px;
+      border: 1px solid rgba(0,0,0,.08);
+      box-shadow: 0 6px 18px rgba(0,0,0,.06);
+      overflow: hidden;
+    }
+    .cn-card-header {
+      padding: 16px 18px;
+      background: linear-gradient(90deg, rgba(59,130,246,.12), rgba(100,116,139,.08));
+      border-bottom: 1px solid rgba(0,0,0,.06);
+    }
+    .cn-card-header h2 {
+      margin: 0;
+      font-weight: 800;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .cn-muted { opacity: .75; }
+    .cn-badges { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .cn-badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid rgba(0,0,0,.08);
+      background: rgba(255,255,255,.7);
+      cursor: pointer;
+      user-select: none;
+    }
+    .cn-badge.active {
+      background: rgba(59,130,246,.14);
+      border-color: rgba(59,130,246,.25);
+    }
+    .cn-form-body { padding: 18px; }
+    .cn-label {
+      font-weight: 800;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .cn-hint { font-size: 12px; opacity: .7; margin-top: 6px; }
+    .cn-counter { font-size: 12px; opacity: .65; white-space: nowrap; }
+    .cn-field { margin-bottom: 16px; }
+    .cn-field input, .cn-field textarea {
+      border-radius: 10px !important;
+      border: 1px solid rgba(0,0,0,.12) !important;
+      box-shadow: none !important;
+      padding: 10px 12px !important;
+      width: 100% !important;
+    }
+    .cn-field textarea { min-height: 140px; resize: vertical; }
+    .cn-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      border-top: 1px solid rgba(0,0,0,.06);
+      background: rgba(0,0,0,.02);
+    }
+    .cn-actions .btn { border-radius: 10px !important; font-weight: 800; }
+    .cn-right-actions { display:flex; gap:10px; flex-wrap:wrap; }
+    .cn-note {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(34,197,94,.10);
+      border: 1px solid rgba(34,197,94,.18);
+      font-size: 12px;
+      font-weight: 700;
+      color: rgba(0,0,0,.72);
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="content">
+    <div class="container-fluid" style="max-width: 920px;">
+      <div class="cn-card">
+        <div class="cn-card-header">
+          <h2>
+            <span class="fas fa-bug"></span>
+            Submit Feedback
+          </h2>
+          <div class="cn-muted" style="margin-top:6px;">
+            Report bugs, request features, or share improvements to make Campus Nexus better.
+          </div>
+
+          {# UI-only chips (optional). If you later add category field to model, we can wire it up. #}
+          <div class="cn-badges" id="cnBadges">
+            <span class="cn-badge active" data-type="bug"> Bug</span>
+            <span class="cn-badge" data-type="feature"> Feature</span>
+            <span class="cn-badge" data-type="ui"> UI/UX</span>
+            <span class="cn-badge" data-type="other"> Other</span>
+          </div>
+          <div class="cn-hint cn-muted">
+            Tip: include the steps to reproduce + what you expected vs what happened.
+          </div>
+        </div>
+
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <div class="cn-form-body">
+
+            {% if form.non_field_errors %}
+              <div class="alert alert-danger">
+                {{ form.non_field_errors }}
+              </div>
+            {% endif %}
+
+            <div class="cn-field">
+              <div class="cn-label">
+                <span>{{ form.subject.label }}</span>
+                <span class="cn-counter"><span id="subjectCount">0</span>/200</span>
+              </div>
+
+              {% if form.subject.errors %}
+                <div class="alert alert-danger" style="padding:8px 10px; border-radius:10px;">
+                  {{ form.subject.errors }}
+                </div>
+              {% endif %}
+
+              {{ form.subject }}
+              <div class="cn-hint">Example: “Payments page shows wrong totals”, “Need export to CSV”.</div>
+            </div>
+
+            <div class="cn-field">
+              <div class="cn-label">
+                <span>{{ form.message.label }}</span>
+                <span class="cn-counter"><span id="messageCount">0</span> chars</span>
+              </div>
+
+              {% if form.message.errors %}
+                <div class="alert alert-danger" style="padding:8px 10px; border-radius:10px;">
+                  {{ form.message.errors }}
+                </div>
+              {% endif %}
+
+              {{ form.message }}
+              <div class="cn-hint">
+                Include: steps, screenshots description, user role (Dean/Guild/Admin), and the page you were on.
+              </div>
+            </div>
+
+            <div class="cn-note">
+               Your feedback is private and only visible to the system administrator.
+            </div>
+
+            {# hidden input to store UI chip selection (optional) #}
+            <input type="hidden" name="ui_category" id="uiCategory" value="bug">
+          </div>
+
+          <div class="cn-actions">
+            <a class="btn btn-outline-secondary" href="{% url 'admin:index' %}">
+              ← Back to Dashboard
+            </a>
+
+            <div class="cn-right-actions">
+              <button type="submit" class="btn btn-primary">
+                <span class="fas fa-paper-plane"></span>
+                Submit Feedback
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="mt-3 cn-muted" style="font-size:12px;">
+        Need urgent help? Share the error screenshot to your tech support group and submit it here too.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      // badge selection (UI only)
+      const badges = document.querySelectorAll("#cnBadges .cn-badge");
+      const uiCategory = document.getElementById("uiCategory");
+
+      badges.forEach(b => {
+        b.addEventListener("click", () => {
+          badges.forEach(x => x.classList.remove("active"));
+          b.classList.add("active");
+          uiCategory.value = b.dataset.type || "bug";
+        });
+      });
+
+      // counters
+      const subject = document.getElementById("id_subject");
+      const message = document.getElementById("id_message");
+
+      const subjectCount = document.getElementById("subjectCount");
+      const messageCount = document.getElementById("messageCount");
+
+      function update() {
+        if (subject) subjectCount.textContent = (subject.value || "").length;
+        if (message) messageCount.textContent = (message.value || "").length;
+      }
+      ["keyup","change","input"].forEach(evt => {
+        if (subject) subject.addEventListener(evt, update);
+        if (message) message.addEventListener(evt, update);
+      });
+      update();
+    })();
+  </script>
+{% endblock %}
