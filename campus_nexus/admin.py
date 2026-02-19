@@ -1,15 +1,25 @@
 from dataclasses import fields
+from django.utils import timezone
 from urllib import request
 from django.conf import settings
-from django.contrib import admin
+from django.contrib import admin, messages
 from django import forms
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Sum
 from django.core.mail import send_mail
 from django.db import transaction
 from django.utils.html import format_html
+from django.shortcuts import redirect
+from django.template.response import TemplateResponse
+from django.urls import path
+from datetime import timedelta
 
 from campus_nexus.models import *
+from .finance_utils import get_or_create_charge_for_fee, create_charge_custom
+from .notifications.email_utils import send_payment_recorded_email
+from campus_nexus.services.subscriptions import ensure_current_subscription_charge, recompute_overdue_flags_for_association
+from campus_nexus.services.subscription_emails import send_subscription_reminder_email
+
 # ---------------------------------------------------------------------
 # Mixins
 # ---------------------------------------------------------------------
@@ -100,16 +110,39 @@ class MembershipInline(AssociationInlineGuardMixin, admin.TabularInline):
     model = Membership
     extra = 0
     autocomplete_fields = ("member",)
-    show_change_link = False  
+    show_change_link = False
     fields = ("member", "status", "joined_at")
     readonly_fields = ("joined_at",)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        assoc_admin = getattr(request.user, "association_admin", None)
+        if assoc_admin and self.parent_object and self.parent_object.id != assoc_admin.association_id:
+            return qs.none()
+        return qs
+
+    def get_formset(self, request, obj=None, **kwargs):
+        # store parent object for get_queryset
+        self.parent_object = obj
+        return super().get_formset(request, obj, **kwargs)
 
 class FeeInline(AssociationInlineGuardMixin, admin.TabularInline):
     model = Fee
     extra = 0
-    show_change_link = False 
+    show_change_link = False
     fields = ("fee_type", "amount", "duration_months", "created_at")
     readonly_fields = ("created_at",)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        assoc_admin = getattr(request.user, "association_admin", None)
+        if assoc_admin and self.parent_object and self.parent_object.id != assoc_admin.association_id:
+            return qs.none()
+        return qs
+
+    def get_formset(self, request, obj=None, **kwargs):
+        self.parent_object = obj
+        return super().get_formset(request, obj, **kwargs)
 
 class CabinetInline(AssociationInlineGuardMixin, admin.TabularInline):
     model = Cabinet
@@ -212,39 +245,27 @@ class DeanAdmin(admin.ModelAdmin):
         return request.user.is_superuser
     
 @admin.register(AssociationAdmin)
-class AssociationAdminAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+class AssociationAdminAdmin(admin.ModelAdmin):
     list_display = ("association", "user", "title")
-    search_fields = ("association__name", "user__username", "user__first_name", "user__last_name")
+    search_fields = (
+        "association__name",
+        "user__username",
+        "user__first_name",
+        "user__last_name",
+    )
     fields = ("association", "user", "title", "bio", "profile_photo")
-    readonly_fields = ("association", "user")
 
     def has_module_permission(self, request):
-        return (
-            request.user.is_superuser
-            or self.is_guild_admin(request)
-            or self.is_dean(request)
-            or self.is_association_admin(request)
-        )
+        return request.user.is_superuser
 
     def has_view_permission(self, request, obj=None):
-        return self.has_module_permission(request)
+        return request.user.is_superuser
 
     def has_add_permission(self, request):
-        return request.user.is_superuser or self.is_guild_admin(request)
+        return request.user.is_superuser
 
     def has_change_permission(self, request, obj=None):
-        if request.user.is_superuser or self.is_guild_admin(request):
-            return True
-        if self.is_dean(request):
-            return False
-
-        assoc_admin = getattr(request.user, "association_admin", None)
-        if not assoc_admin:
-            return False
-
-        if obj is None:
-            return True
-        return obj.pk == assoc_admin.pk
+        return request.user.is_superuser
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
@@ -529,9 +550,10 @@ class MemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 
 @admin.register(Membership)
 class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
-    list_display = ("member", "association", "joined_at", "status")
+    list_display = ("member", "association", "status", "joined_at", "subscription_anchor_date")
     ordering = ("-joined_at",)
     autocomplete_fields = ("member",)
+
     list_filter = (
         "status",
         "member__member_type",
@@ -545,15 +567,12 @@ class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         "member__last_name",
         "member__email",
         "member__phone",
-    )
+        "association__name",    )
 
-    # -----------------------------
-    # Request-aware ModelForm
-    # -----------------------------
     class MembershipAdminForm(forms.ModelForm):
         class Meta:
             model = Membership
-            fields = "__all__"
+            fields = ("member", "association", "status", "subscription_anchor_date")
 
         def __init__(self, *args, **kwargs):
             self.request = kwargs.pop("request", None)
@@ -561,43 +580,37 @@ class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 
             assoc_admin = getattr(getattr(self.request, "user", None), "association_admin", None)
 
-            # Association admin: force association and hide the field
             if assoc_admin:
-                # set early (prevents "Association is required")
                 self.instance.association = assoc_admin.association
-
                 if "association" in self.fields:
                     self.fields.pop("association")
 
+            if "subscription_anchor_date" in self.fields:
+                self.fields["subscription_anchor_date"].label = "Subscription start date"
+                self.fields["subscription_anchor_date"].help_text = (
+                    "Used to calculate subscription cycles. Leave blank to use today."
+                )
+
         def clean(self):
-            cleaned_data = super().clean()
+            cleaned = super().clean()
+            association = cleaned.get("association") or getattr(self.instance, "association", None)
+            member = cleaned.get("member")
 
-            # determine association safely (field may be hidden for assoc admins)
-            association = cleaned_data.get("association") or getattr(self.instance, "association", None)
-            member = cleaned_data.get("member")
-
-            # Faculty restriction validation (clear message on member field)
             if member and association and getattr(association, "faculty_id", None):
                 if member.faculty_id != association.faculty_id:
                     raise ValidationError({
                         "member": (
-                            f"{member} belongs to {member.faculty}, "
+                            f"{member.full_name} belongs to {member.faculty}, "
                             f"but this association is restricted to {association.faculty}."
                         )
                     })
 
-            return cleaned_data
+            return cleaned
 
     form = MembershipAdminForm
 
-    # Restrict member autocomplete ONLY for cabinet use was elsewhere.
-    # For membership creation you may want broader search; keep this only if desired.
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    # Correct request injection: subclass the actual ModelForm, not forms.Form
-    def get_form(self, request, obj=None, **kwargs):
-        Form = super().get_form(request, obj, **kwargs)
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        Form = super().get_form(request, obj, change=change, **kwargs)
 
         class RequestInjectedForm(Form):
             def __init__(self, *args, **kw):
@@ -606,7 +619,9 @@ class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 
         return RequestInjectedForm
 
-    # Permissions (keep yours)
+    # -----------------------------
+    # Permissions
+    # -----------------------------
     def has_module_permission(self, request):
         return (
             request.user.is_superuser
@@ -619,112 +634,71 @@ class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         return self.has_module_permission(request)
 
     def has_add_permission(self, request):
+        if self.is_dean(request):
+            return False
         return request.user.is_superuser or self.is_association_admin(request)
 
     def has_change_permission(self, request, obj=None):
+        if self.is_dean(request):
+            return False
         return request.user.is_superuser or self.is_association_admin(request)
 
     def has_delete_permission(self, request, obj=None):
+        if self.is_dean(request):
+            return False
         return request.user.is_superuser or self.is_association_admin(request)
 
-    def get_list_filter(self, request):
-        lf = list(super().get_list_filter(request) or ())
-        if self.is_association_admin(request) and "association" in lf:
-            lf.remove("association")
-        return tuple(lf)
-
+    # -----------------------------
+    # Queryset scoping
+    # -----------------------------
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
+        qs = super().get_queryset(request).select_related("member", "association")
 
         if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
             return qs
 
-        if assoc_admin := self.is_association_admin(request):
+        assoc_admin = getattr(request.user, "association_admin", None)
+        if assoc_admin:
             return qs.filter(association=assoc_admin.association)
 
         return qs.none()
 
-    def get_exclude(self, request, obj=None):
-        excluded = list(super().get_exclude(request, obj) or ())
-        if self.is_association_admin(request):
-            excluded.append("association")
-        return tuple(excluded)
+    # -----------------------------
+    # Cleaner UI
+    # -----------------------------
+    def get_fieldsets(self, request, obj=None):
+        """
+        - On ADD: hide status (auto Active).
+        - On CHANGE: show status (in case they suspend/discard later).
+        - Show association field only to superuser/guild/dean.
+        """
+        fields = ["member", "subscription_anchor_date"]
 
+        if obj is not None:
+            fields.insert(1, "status")  # show status only on edit
+
+        if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
+            fields.insert(1, "association")
+
+        return (("Membership", {"fields": fields}),)
+
+    # -----------------------------
+    # Save behavior
+    # -----------------------------
     def save_model(self, request, obj, form, change):
         is_new = obj.pk is None
 
         if self.is_association_admin(request) and not (request.user.is_superuser or self.is_guild_admin(request)):
             obj.association = request.user.association_admin.association
 
-        super().save_model(request, obj, form, change)
+        if not obj.subscription_anchor_date:
+            obj.subscription_anchor_date = timezone.localdate()
 
-        # Email notification ONLY when a membership is created
+        # Auto status on create
         if is_new:
-            member = obj.member
-            association = obj.association
+            obj.status = "active"
 
-            subject = f"You've been added to {association.name} on Campus Nexus"
-            message = (
-                f"Hello {member.first_name},\n\n"
-                f"You have been added as a member of '{association.name}' in Campus Nexus.\n\n"
-                f"If you believe this was a mistake, please contact your association leadership.\n\n"
-                f"Thank you,\n"
-                f"Campus Nexus"
-            )
-
-            from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@campusnexus.local")
-
-            def _send():
-                if member.email:
-                    send_mail(
-                        subject=subject,
-                        message=message,
-                        from_email=from_email,
-                        recipient_list=[member.email],
-                        fail_silently=True,  # keep admin stable even if email server is down
-                    )
-
-            transaction.on_commit(_send)
-    
-    def _email_membership_removed(self, membership: Membership):
-        member = membership.member
-        association = membership.association
-        if not member.email:
-            return
-
-        subject = f"You've been removed from {association.name} on Campus Nexus"
-        message = (
-            f"Hello {member.first_name},\n\n"
-            f"You have been removed from '{association.name}' on Campus Nexus.\n\n"
-            f"If you believe this was a mistake, please contact your association leadership.\n\n"
-            f"Regards,\n"
-            f"Campus Nexus"
-        )
-        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@campusnexus.local")
-
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=from_email,
-            recipient_list=[member.email],
-            fail_silently=True,
-        )
-
-    def delete_model(self, request, obj):
-        # capture details before deletion
-        membership = Membership.objects.select_related("member", "association").get(pk=obj.pk)
-
-        super().delete_model(request, obj)
-
-        transaction.on_commit(lambda: self._email_membership_removed(membership))
-
-    def delete_queryset(self, request, queryset):
-        # capture details before deletion (bulk)
-        memberships = list(queryset.select_related("member", "association"))
-
-        super().delete_queryset(request, queryset)
-
-        transaction.on_commit(lambda: [self._email_membership_removed(m) for m in memberships])
+        super().save_model(request, obj, form, change)
 
 @admin.register(Cabinet)
 class CabinetAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
@@ -860,14 +834,119 @@ class CabinetMemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             return qs.filter(cabinet__association=assoc_admin.association)
 
         return qs.none()
+    
+    
+SUB_FIELDS = (
+    "duration_months",
+    "grace_days",
+    # "reminder_days_before_due",
+    "max_missed_cycles",
+    "allow_installments",
+)
+class FeeAdminForm(forms.ModelForm):
+    """
+    - For Association Admins: association field is removed and auto-set in admin.save_model()
+    - Subscription rules enforced only when fee_type == 'subscription'
+    """
+
+    class Meta:
+        model = Fee
+        fields = "__all__"
+        exclude = ("reminder_days_before_due",)
+
+    def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop("request", None)
+        super().__init__(*args, **kwargs)
+
+        # Help texts
+        self.fields["duration_months"].help_text = (
+            "Subscription only. E.g. 4 means pay every 4 months. 12 means yearly."
+        )
+        self.fields["grace_days"].help_text = (
+            "Subscription only. Extra days after due date before marking overdue."
+        )
+        self.fields["reminder_days_before_due"].help_text = (
+            "Subscription only. Example: [14, 3] sends reminders 14 and 3 days before due."
+        )
+        self.fields["max_missed_cycles"].help_text = (
+            "Subscription only. After this many missed cycles, member can be marked inactive."
+        )
+        self.fields["allow_installments"].help_text = (
+            "Subscription only. Allow partial payments to clear the charge."
+        )
+
+        # If association admin: remove association field (since they are already inside their association)
+        user = getattr(self.request, "user", None)
+        assoc_admin = getattr(user, "association_admin", None) if user else None
+        if assoc_admin and "association" in self.fields:
+            self.fields.pop("association")
+
+        # If membership fee: make subscription fields optional on the form level
+        fee_type = self.initial.get("fee_type") or getattr(self.instance, "fee_type", None)
+        if fee_type == "membership":
+            for f in SUB_FIELDS:
+                if f in self.fields:
+                    self.fields[f].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        fee_type = cleaned.get("fee_type")
+
+        if fee_type == "subscription":
+            duration = cleaned.get("duration_months") or 0
+            if duration <= 0:
+                raise ValidationError({
+                    "duration_months": "Required for Subscription. Enter months (e.g. 4 or 12)."
+                })
+
+            missed = cleaned.get("max_missed_cycles")
+            if missed is None or missed < 1:
+                raise ValidationError({
+                    "max_missed_cycles": "Required for Subscription. Must be at least 1."
+                })
+
+            days = cleaned.get("reminder_days_before_due") or []
+            if not isinstance(days, list) or any((not isinstance(x, int) or x < 0) for x in days):
+                raise ValidationError({
+                    "reminder_days_before_due": "Enter a JSON list of non-negative integers. Example: [14, 3]."
+                })
+
+        else:
+            # membership fee: reset subscription policy fields to safe defaults
+            cleaned["duration_months"] = 0
+            cleaned["grace_days"] = 0
+            cleaned["reminder_days_before_due"] = []
+            cleaned["max_missed_cycles"] = 0
+            cleaned["allow_installments"] = True
+
+        return cleaned
+
 
 @admin.register(Fee)
 class FeeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    form = FeeAdminForm
+
     list_display = ("association", "fee_type", "amount", "duration_months", "created_at")
     list_filter = ("fee_type", "association", "created_at")
     ordering = ("-created_at",)
     search_fields = ("association__name", "fee_type")
+    readonly_fields = ("created_at",)
 
+    class Media:
+        js = ("js/fee_form.js",)
+
+    # ---- Inject request into the form (so it can hide association field) ----
+    def get_form(self, request, obj=None, **kwargs):
+        Form = super().get_form(request, obj, **kwargs)
+
+        class RequestInjectedForm(Form):
+            def __init__(self, *args, **kw):
+                kw["request"] = request
+                super().__init__(*args, **kw)
+
+        return RequestInjectedForm
+
+    # ---- Permissions ----
     def has_module_permission(self, request):
         return (
             request.user.is_superuser
@@ -882,193 +961,460 @@ class FeeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
     def has_add_permission(self, request):
         if self.is_dean(request):
             return False
-        return request.user.is_superuser or self.is_association_admin(request)
+        return request.user.is_superuser or self.is_guild_admin(request) or self.is_association_admin(request)
 
     def has_change_permission(self, request, obj=None):
         if self.is_dean(request):
             return obj is None
-        return request.user.is_superuser or self.is_association_admin(request)
+        return request.user.is_superuser or self.is_guild_admin(request) or self.is_association_admin(request)
 
     def has_delete_permission(self, request, obj=None):
         if self.is_dean(request):
             return False
-        return request.user.is_superuser or self.is_association_admin(request)
+        return request.user.is_superuser or self.is_guild_admin(request)
 
-    def get_exclude(self, request, obj=None):
-        excluded = list(super().get_exclude(request, obj) or ())
-        if self.is_association_admin(request) and not self.is_guild_admin(request):
-            excluded.append("association")
-        return tuple(excluded)
+    # ---- Fields shown ----
+    def get_fields(self, request, obj=None):
+        fields = ["association", "fee_type", "amount"] + list(SUB_FIELDS) + ["created_at"]
 
+        # Association admin should NOT see association field
+        if self.is_association_admin(request) and not (request.user.is_superuser or self.is_guild_admin(request)):
+            if "association" in fields:
+                fields.remove("association")
+
+        return fields
+
+    # ---- Scoping ----
     def get_queryset(self, request):
         qs = super().get_queryset(request)
 
-        # Superuser/Guild/Dean: view all fees
+        # Superuser/Guild/Dean: see all
         if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
             return qs
 
         # Association admin: only own association
-        if assoc_admin := self.is_association_admin(request):
+        assoc_admin = getattr(request.user, "association_admin", None)
+        if assoc_admin:
             return qs.filter(association=assoc_admin.association)
 
         return qs.none()
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "association" and self.is_association_admin(request) and not self.is_guild_admin(request):
-            assoc = request.user.association_admin.association
-            kwargs["queryset"] = Association.objects.filter(id=assoc.id)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
+    # ---- Auto-set association ----
     def save_model(self, request, obj, form, change):
-        if self.is_association_admin(request) and not request.user.is_superuser and not self.is_guild_admin(request):
+        if self.is_association_admin(request) and not (request.user.is_superuser or self.is_guild_admin(request)):
             obj.association = request.user.association_admin.association
         super().save_model(request, obj, form, change)
 
 @admin.register(Charge)
 class ChargeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
-    list_display = ("membership", "association", "purpose", "amount_due", "amount_paid_total_display", "status", "created_at")
-    list_filter = ("status", "purpose", "association")
+    """
+    Charges are system-generated “what a member owes”.
+    Payments attach to charges and clear them partially/fully.
+
+    - Association admins can view charges for their association only.
+    - Superuser can view all + edit if necessary.
+    - Includes changelist buttons to send reminders.
+    """
+
+    change_list_template = "admin/campus_nexus/charge/change_list.html"
+
+    list_display = (
+        "member_name",
+        "association",
+        "fee",
+        "purpose",
+        "period",
+        "amount_due",
+        "amount_paid_col",
+        "balance_col",
+        "status",
+        "due_date",
+        "is_overdue",
+    )
+    list_filter = (
+        "status",
+        "is_overdue",
+        "purpose",
+        "fee__fee_type",
+        "association",
+    )
     search_fields = (
         "membership__member__registration_number",
         "membership__member__first_name",
         "membership__member__last_name",
         "membership__member__email",
         "association__name",
-        "title",
     )
-    ordering = ("-created_at",)
-    autocomplete_fields = ("membership", "fee")
+    ordering = ("-due_date", "-created_at")
 
-    readonly_fields = ("status", "created_by", "created_at")
+    readonly_fields = (
+        "created_at",
+        "created_by",
+        "association",
+        "membership",
+        "fee",
+        "purpose",
+        "title",
+        "description",
+        "amount_due",
+        "due_date",
+        "period_start",
+        "period_end",
+        "status",
+        "is_overdue",
+    )
 
-    def amount_paid_total_display(self, obj):
-        return obj.amount_paid_total
-    amount_paid_total_display.short_description = "Paid Total"
+    actions = ["send_subscription_reminders_selected"]
 
+    # ---------------------------
+    # Permissions (privacy lock)
+    # ---------------------------
     def has_module_permission(self, request):
-        return (
-            request.user.is_superuser
-            or self.is_guild_admin(request)
-            or self.is_dean(request)
-            or self.is_association_admin(request)
-        )
+        return request.user.is_superuser or bool(self.is_association_admin(request))
 
     def has_view_permission(self, request, obj=None):
         return self.has_module_permission(request)
 
     def has_add_permission(self, request):
-        if self.is_dean(request):
-            return False
-        return request.user.is_superuser or self.is_association_admin(request)
-
-    def has_change_permission(self, request, obj=None):
-        if self.is_dean(request):
-            return obj is None
-        if request.user.is_superuser or self.is_guild_admin(request):
-            return True
-        if not self.is_association_admin(request):
-            return False
-        if obj is None:
-            return True
-        return obj.association_id == request.user.association_admin.association_id
-
-    def has_delete_permission(self, request, obj=None):
-        if self.is_dean(request):
-            return False
+        # charges are system-generated; superuser only
         return request.user.is_superuser
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        # Lock membership/fee choices to association for association admin
-        if self.is_association_admin(request) and not self.is_guild_admin(request):
-            assoc = request.user.association_admin.association
+    def has_change_permission(self, request, obj=None):
+        # avoid tampering
+        return request.user.is_superuser
 
-            if db_field.name == "membership":
-                kwargs["queryset"] = Membership.objects.filter(association=assoc)
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
 
-            if db_field.name == "fee":
-                kwargs["queryset"] = Fee.objects.filter(association=assoc)
+    # ---------------------------
+    # Custom button URLs (views)
+    # ---------------------------
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "send-reminders/",
+                self.admin_site.admin_view(self.send_reminders_view),
+                name="campus_nexus_charge_send_reminders",
+            )
+        ]
+        return custom + urls
 
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    def send_reminders_view(self, request):
+        """
+        Changelist buttons hit this endpoint.
+        scope can be: due_soon | overdue
+        """
+        if not (request.user.is_superuser or self.is_association_admin(request)):
+            self.message_user(request, "You are not allowed to perform this action.", level=messages.ERROR)
+            return redirect("..")
 
+        scope = request.GET.get("scope", "due_soon")
+        today = timezone.localdate()
+        due_soon_cutoff = today + timedelta(days=3)
+
+        qs = Charge.objects.select_related("membership__member", "association", "fee").annotate(
+            paid_total=Sum("payments__amount_paid")
+        )
+
+        # scope data to association admin
+        assoc_admin = getattr(request.user, "association_admin", None)
+        if assoc_admin and not request.user.is_superuser:
+            assoc_id = assoc_admin.association_id
+
+            # keep status/overdue fresh & ensure current cycle exists (your existing behavior)
+            recompute_overdue_flags_for_association(assoc_id)
+            for m in assoc_admin.association.memberships.all().select_related("association"):
+                ensure_current_subscription_charge(m)
+
+            qs = qs.filter(association_id=assoc_id)
+
+        # only subscription charges that are not cleared
+        qs = qs.filter(
+            purpose="subscription_fee",
+            status__in=["unpaid", "partial"],
+            due_date__isnull=False,
+        )
+
+        if scope == "overdue":
+            qs = qs.filter(due_date__lt=today)
+            title = "overdue"
+        else:
+            qs = qs.filter(due_date__gte=today, due_date__lte=due_soon_cutoff)
+            title = "due in 3 days"
+
+        sent = 0
+        missing = 0
+
+        for c in qs:
+            # extra safety: ignore if cleared by any chance
+            if c.balance <= 0:
+                continue
+
+            days_left = (c.due_date - today).days
+            ok = send_subscription_reminder_email(
+                member=c.membership.member,
+                association=c.association,
+                charge=c,
+                days_left=days_left,
+            )
+            if ok:
+                sent += 1
+            else:
+                missing += 1
+
+        self.message_user(
+            request,
+            f"Reminder run complete ({title}). Emails sent: {sent}. Missing member email: {missing}.",
+            level=messages.SUCCESS,
+        )
+        return redirect("..")
+
+    # ---------------------------
+    # Queryset scoping
+    # ---------------------------
     def get_queryset(self, request):
-        qs = super().get_queryset(request).select_related("membership", "membership__member", "association", "fee")
-        if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
+        qs = (
+            super()
+            .get_queryset(request)
+            .select_related("membership", "membership__member", "association", "fee")
+            .annotate(paid_total=Sum("payments__amount_paid"))
+        )
+
+        if request.user.is_superuser:
             return qs
-        if assoc_admin := self.is_association_admin(request):
+
+        assoc_admin = getattr(request.user, "association_admin", None)
+        if assoc_admin:
+            # Keep fresh for their association
+            recompute_overdue_flags_for_association(assoc_admin.association_id)
+
+            # Ensure current cycle exists (you already do this)
+            for m in assoc_admin.association.memberships.all().select_related("association"):
+                ensure_current_subscription_charge(m)
+
             return qs.filter(association=assoc_admin.association)
+
         return qs.none()
 
-    def save_model(self, request, obj, form, change):
-        if not change:
-            obj.created_by = request.user
+    # ---------------------------
+    # Columns helpers
+    # ---------------------------
+    def member_name(self, obj):
+        return obj.membership.member.full_name
+    member_name.short_description = "Member"
 
-        # Force association for association admin
-        if self.is_association_admin(request) and not (request.user.is_superuser or self.is_guild_admin(request)):
-            assoc = request.user.association_admin.association
-            obj.association = assoc
+    def period(self, obj):
+        if obj.period_start and obj.period_end:
+            return f"{obj.period_start} → {obj.period_end}"
+        return "—"
+    period.short_description = "Period"
 
-        super().save_model(request, obj, form, change)
+    def amount_paid_col(self, obj):
+        return f"{obj.amount_paid_total}"
+    amount_paid_col.short_description = "Paid"
 
-from django.core.mail import send_mail
-from django.conf import settings
+    def balance_col(self, obj):
+        bal = obj.balance
+        if bal <= 0:
+            return format_html("<b style='color:green;'>0</b>")
+        return format_html("<b style='color:#b45309;'>{}</b>", bal)
+    balance_col.short_description = "Balance"
+
+    # ---------------------------
+    # Admin action (selected)
+    # ---------------------------
+    @admin.action(description="Send subscription reminder email (selected)")
+    def send_subscription_reminders_selected(self, request, queryset):
+        today = timezone.localdate()
+        sent = 0
+        missing = 0
+
+        for c in queryset.select_related("membership__member", "association"):
+            if c.purpose != "subscription_fee":
+                continue
+            if not c.due_date:
+                continue
+            if c.balance <= 0:
+                continue
+
+            days_left = (c.due_date - today).days
+            ok = send_subscription_reminder_email(
+                member=c.membership.member,
+                association=c.association,
+                charge=c,
+                days_left=days_left,
+            )
+            if ok:
+                sent += 1
+            else:
+                missing += 1
+
+        self.message_user(
+            request,
+            f"Selected reminders sent: {sent}. Members missing email: {missing}.",
+            level=messages.SUCCESS,
+        )
+class PaymentAdminForm(forms.ModelForm):
+    """
+    Treasurer UX:
+    - Always pick Membership
+    - Either pick Fee (recommended)
+    - OR fill custom fields (event/merch/donation/other)
+    Charge is created automatically.
+    """
+
+    # Extra fields for custom charges
+    purpose = forms.ChoiceField(choices=Charge.PURPOSE_CHOICES, required=False)
+    title = forms.CharField(required=False)
+    amount_due = forms.DecimalField(required=False, max_digits=12, decimal_places=2)
+    due_date = forms.DateField(required=False)
+
+    class Meta:
+        model = Payment
+        # Exclude charge — it is auto-created
+        fields = (
+            "membership",
+            "fee",
+            "amount_paid",
+            "paid_at",
+            "payment_method",
+            "reference_code",
+            "receipt_image",
+            "note",
+            "status",
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+
+        membership = cleaned.get("membership")
+        fee = cleaned.get("fee")
+
+        # Custom inputs
+        purpose = self.cleaned_data.get("purpose")
+        title = self.cleaned_data.get("title")
+        amount_due = self.cleaned_data.get("amount_due")
+        due_date = self.cleaned_data.get("due_date")
+
+        if not membership:
+            raise ValidationError({"membership": "Membership is required."})
+
+        # If fee is selected, ignore custom fields
+        if fee:
+            # Optional: ensure fee belongs to same association
+            if fee.association_id != membership.association_id:
+                raise ValidationError({"fee": "Selected fee must belong to the same association as the membership."})
+            return cleaned
+        
+        if fee and fee.fee_type == "subscription" and (fee.duration_months or 0) <= 0:
+            raise ValidationError({"fee": "Subscription fee must have duration_months set (e.g. 4 for Coder's, 12 for FOSSA)."})
+
+
+        # No fee selected, then user must provide custom charge info
+        if not purpose:
+            raise ValidationError({"purpose": "Select what this payment is for (event/merch/donation/other)."})
+        if not amount_due:
+            raise ValidationError({"amount_due": "Enter the total amount due for this item."})
+        if not title:
+            raise ValidationError({"title": "Enter a title (e.g., Dinner Ticket, Hoodie, Donation)."})
+        # due_date optional
+
+        return cleaned
 
 @admin.register(Payment)
 class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
-    list_display = ("membership", "paid_at", "charge", "amount_paid", "payment_method", "status")
-    list_filter = ("paid_at", "status", "payment_method", "charge__association")
-    ordering = ("-paid_at",)
-    autocomplete_fields = ("membership", "charge", "fee")
+    form = PaymentAdminForm
 
+    list_display = ("membership", "paid_at", "fee", "amount_paid", "status")
+    ordering = ("-paid_at",)
     search_fields = (
         "membership__member__registration_number",
         "membership__member__first_name",
         "membership__member__last_name",
         "membership__member__email",
-        "charge__association__name",
-        "reference_code",
+        "fee__association__name",
     )
+    list_select_related = ("membership", "membership__member", "fee", "charge")
 
+    def get_list_filter(self, request):
+        """
+        Assoc admins don't need (fee__association) filter because they are already scoped.
+        Superuser can keep it for global reporting.
+        """
+        if request.user.is_superuser:
+            return ("paid_at", "status", "fee__association")
+        return ("paid_at", "status")
+
+    # ---------------------------
+    # Permissions (privacy lock)
+    # ---------------------------
     def has_module_permission(self, request):
-        return (
-            request.user.is_superuser
-            or self.is_guild_admin(request)
-            or self.is_dean(request)
-            or self.is_association_admin(request)
-        )
+        # Only superuser + association admins see Payments module at all
+        return request.user.is_superuser or bool(self.is_association_admin(request))
 
     def has_view_permission(self, request, obj=None):
-        return self.has_module_permission(request)
+        # Dean/Guild: no access at all (also blocks direct URL access)
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return False
+
+        if request.user.is_superuser:
+            return True
+
+        assoc_admin = self.is_association_admin(request)
+        if not assoc_admin:
+            return False
+
+        # Object-level: only own association
+        if obj is not None:
+            return obj.membership.association_id == assoc_admin.association_id
+        return True
 
     def has_add_permission(self, request):
-        if self.is_dean(request):
+        if self.is_dean(request) or self.is_guild_admin(request):
             return False
-        return request.user.is_superuser or self.is_association_admin(request)
+        return request.user.is_superuser or bool(self.is_association_admin(request))
 
     def has_change_permission(self, request, obj=None):
-        if self.is_dean(request):
-            return obj is None
-        if request.user.is_superuser or self.is_guild_admin(request):
-            return True
-        if not self.is_association_admin(request):
+        if self.is_dean(request) or self.is_guild_admin(request):
             return False
-        if obj is None:
+
+        if request.user.is_superuser:
             return True
-        return obj.charge.association_id == request.user.association_admin.association_id
+
+        assoc_admin = self.is_association_admin(request)
+        if not assoc_admin:
+            return False
+
+        if obj is not None:
+            return obj.membership.association_id == assoc_admin.association_id
+        return True
 
     def has_delete_permission(self, request, obj=None):
-        if self.is_dean(request):
+        if self.is_dean(request) or self.is_guild_admin(request):
             return False
-        return request.user.is_superuser
 
+        if request.user.is_superuser:
+            return True
+
+        assoc_admin = self.is_association_admin(request)
+        if not assoc_admin:
+            return False
+
+        if obj is not None:
+            return obj.membership.association_id == assoc_admin.association_id
+        return True
+
+    # ---------------------------
+    # Scoping
+    # ---------------------------
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if self.is_association_admin(request) and not self.is_guild_admin(request):
+        # Only association admins get scoped choices
+        if self.is_association_admin(request) and not request.user.is_superuser:
             assoc = request.user.association_admin.association
 
             if db_field.name == "membership":
                 kwargs["queryset"] = Membership.objects.filter(association=assoc)
-
-            if db_field.name == "charge":
-                kwargs["queryset"] = Charge.objects.filter(association=assoc)
 
             if db_field.name == "fee":
                 kwargs["queryset"] = Fee.objects.filter(association=assoc)
@@ -1077,63 +1423,81 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request).select_related(
-            "membership", "membership__member",
-            "charge", "charge__association",
-            "fee"
+            "membership", "membership__member", "fee", "charge"
         )
-        if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
+
+        # Superuser: everything
+        if request.user.is_superuser:
             return qs
+
+        # Dean/Guild: nothing (even if they guess the URL)
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return qs.none()
+
+        # Association admin: only own association
         if assoc_admin := self.is_association_admin(request):
-            return qs.filter(charge__association=assoc_admin.association)
+            return qs.filter(membership__association=assoc_admin.association)
+
         return qs.none()
 
+    # ---------------------------
+    # Save + auto charge + email
+    # ---------------------------
+    @transaction.atomic
     def save_model(self, request, obj, form, change):
-        # Ensure audit
+        """
+        Auto-create or reuse Charge based on the form:
+        - If fee selected → reuse/create fee charge (subscription -> current cycle)
+        - Else → create a custom charge (event/merch/donation/other)
+        """
+        # HARD SAFETY: association admins can only record for their association
+        if not request.user.is_superuser:
+            assoc_admin = self.is_association_admin(request)
+            if not assoc_admin:
+                raise PermissionDenied("You are not allowed to record payments.")
+            if obj.membership.association_id != assoc_admin.association_id:
+                raise PermissionDenied("You can only record payments for your association.")
+
+        # Always record who entered it
         if not obj.recorded_by_id:
             obj.recorded_by = request.user
 
-        # Keep membership consistent with charge
-        if obj.charge_id:
-            obj.membership = obj.charge.membership
-            if obj.charge.fee_id:
-                obj.fee = obj.charge.fee
+        membership = obj.membership
+        fee = obj.fee
+
+        if not obj.charge_id:
+            if fee:
+                charge = get_or_create_charge_for_fee(
+                    membership=membership,
+                    fee=fee,
+                    user=request.user,
+                )
+            else:
+                charge = create_charge_custom(
+                    membership=membership,
+                    purpose=form.cleaned_data.get("purpose"),
+                    title=form.cleaned_data.get("title"),
+                    amount_due=form.cleaned_data.get("amount_due"),
+                    due_date=form.cleaned_data.get("due_date"),
+                    description=form.cleaned_data.get("note") or "",
+                    user=request.user,
+                )
+            obj.charge = charge
 
         super().save_model(request, obj, form, change)
 
-        # After save: recompute charge status
-        obj.charge.recompute_status()
-        obj.charge.save(update_fields=["status"])
+        # Recompute charge status after saving payment
+        if obj.charge_id:
+            obj.charge.recompute_status()
+            obj.charge.save(update_fields=["status"])
 
-        # Notify member (email) — best effort, never crash admin
-        member = obj.membership.member
-        assoc = obj.charge.association
-        purpose = obj.charge.title or obj.charge.get_purpose_display()
-
-        if member.email:
-            try:
-                subject = f"Payment received — {assoc.name}"
-                message = (
-                    f"Hello {member.full_name},\n\n"
-                    f"Your payment has been registered in Campus Nexus.\n\n"
-                    f"Association: {assoc.name}\n"
-                    f"Purpose: {purpose}\n"
-                    f"Amount: {obj.amount_paid}\n"
-                    f"Method: {obj.get_payment_method_display()}\n"
-                    f"Reference: {obj.reference_code or 'N/A'}\n"
-                    f"Date: {obj.paid_at:%Y-%m-%d %H:%M}\n\n"
-                    f"Thank you.\n"
-                    f"— Campus Nexus"
-                )
-                send_mail(
-                    subject,
-                    message,
-                    getattr(settings, "DEFAULT_FROM_EMAIL", None),
-                    [member.email],
-                    fail_silently=True,
-                )
-            except Exception:
-                pass
-
+        # Email notification after commit
+        transaction.on_commit(lambda: send_payment_recorded_email(
+            member=obj.membership.member,
+            association=obj.membership.association,
+            payment=obj,
+            charge=obj.charge,
+        ))
 
 @admin.register(Event)
 class EventAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
@@ -1233,63 +1597,86 @@ class EventAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 @admin.register(Feedback)
-class FeedbackAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+class FeedbackAdmin(admin.ModelAdmin):
     list_display = ("subject", "association", "member", "submitted_by", "submitted_at")
     list_filter = ("association", "submitted_at")
     search_fields = ("subject", "message", "member__email", "member__registration_number", "submitted_by__username")
-    readonly_fields = ("submitted_at", "submitted_by")
+    readonly_fields = ("submitted_at", "submitted_by", "association", "member", "subject", "message")
 
     def has_module_permission(self, request):
-        return (
-            request.user.is_superuser
-            or self.is_guild_admin(request)
-            or self.is_dean(request)
-            or self.is_association_admin(request)
-        )
+        return request.user.is_superuser
 
     def has_view_permission(self, request, obj=None):
-        return self.has_module_permission(request)
+        return request.user.is_superuser
 
     def has_add_permission(self, request):
-        # Allow all platform roles to submit feedback
-        return self.has_module_permission(request)
+        return request.user.is_superuser
 
     def has_change_permission(self, request, obj=None):
-        # Keep it simple: only superuser can edit feedback entries.
-        # Everyone else can view + add only.
         return request.user.is_superuser
 
     def has_delete_permission(self, request, obj=None):
-        # ONLY superuser can delete
         return request.user.is_superuser
+    
+class FeedbackSubmitForm(forms.Form):
+    subject = forms.CharField(max_length=200, widget=forms.TextInput(attrs={"class": "vTextField"}))
+    message = forms.CharField(widget=forms.Textarea(attrs={"rows": 6, "class": "vLargeTextField"}))
 
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
 
-        # Superuser / Guild / Dean see all feedback
-        if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
-            return qs
-
-        # Association admin sees:
-        # - feedback for their association
-        # - system-wide feedback (association is NULL)
-        assoc_admin = getattr(request.user, "association_admin", None)
-        if assoc_admin:
-            return qs.filter(
-                models.Q(association=assoc_admin.association) | models.Q(association__isnull=True)
+def submit_feedback_view(request):
+    """
+    A custom admin page to submit feedback.
+    - Any authenticated admin user can submit.
+    - Feedback entries are only viewable by superuser (via FeedbackAdmin above).
+    """
+    if request.method == "POST":
+        form = FeedbackSubmitForm(request.POST)
+        if form.is_valid():
+            obj = Feedback(
+                subject=form.cleaned_data["subject"],
+                message=form.cleaned_data["message"],
+                submitted_by=request.user,
             )
-        return qs.none()
 
-    def save_model(self, request, obj, form, change):
-        if not change and not obj.submitted_by_id:
-            obj.submitted_by = request.user
+            # If association admin, auto attach their association
+            assoc_admin = getattr(request.user, "association_admin", None)
+            if assoc_admin:
+                obj.association = assoc_admin.association
 
-        # Association admin: auto-attach their association if missing
-        assoc_admin = getattr(request.user, "association_admin", None)
-        if assoc_admin and not obj.association_id:
-            obj.association = assoc_admin.association
+            # If you ever link Member to User later, you can set obj.member here.
+            # For now we leave obj.member optional.
 
-        super().save_model(request, obj, form, change)
+            obj.save()
+
+            messages.success(request, "Thanks! Your feedback has been submitted successfully.")
+            return redirect("admin:index")
+    else:
+        form = FeedbackSubmitForm()
+
+    context = dict(
+        admin.site.each_context(request),
+        title="Submit Feedback",
+        form=form,
+    )
+    return TemplateResponse(request, "admin/submit_feedback.html", context)
+
+
+# ---- register custom URL under /admin/submit-feedback/ ----
+_original_get_urls = admin.site.get_urls
+
+def _custom_get_urls():
+    urls = _original_get_urls()
+    custom = [
+        path(
+            "submit-feedback/",
+            admin.site.admin_view(submit_feedback_view),
+            name="submit_feedback",
+        ),
+    ]
+    return custom + urls
+
+admin.site.get_urls = _custom_get_urls
+
 
 @admin.register(GuildCabinet)
 class GuildCabinetAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
@@ -1334,41 +1721,95 @@ class GuildExecutiveAdmin(admin.ModelAdmin):
         return "—"
     photo_thumb.short_description = "Photo"
 
-@admin.register(GuildAnnouncement)
-class GuildAnnouncementAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
-    list_display = ("title", "cabinet", "is_published", "created_at", "posted_by")
-    list_filter = ("is_published", "cabinet", "created_at")
+@admin.register(Announcement)
+class AnnouncementAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = ("title", "audience", "association", "faculty", "is_published", "created_at", "posted_by")
+    list_filter = ("audience", "is_published", "association", "faculty", "created_at")
     search_fields = ("title", "message")
     readonly_fields = ("created_at", "posted_by")
+
+    fieldsets = (
+        (None, {"fields": ("title", "message")}),
+        ("Audience & Targeting", {"fields": ("audience", "association", "faculty", "cabinet")}),
+        ("Publishing", {"fields": ("is_published",)}),
+        ("Audit", {"fields": ("posted_by", "created_at")}),
+    )
 
     def has_module_permission(self, request):
         return (
             request.user.is_superuser
             or self.is_guild_admin(request)
-            or self.is_dean(request)
             or self.is_association_admin(request)
+            or self.is_dean(request)  # dean can view (we'll enforce read-only below)
         )
 
     def has_view_permission(self, request, obj=None):
         return self.has_module_permission(request)
 
     def has_add_permission(self, request):
-        return request.user.is_superuser or self.is_guild_admin(request)
+        # allow guild + association admins to add announcements
+        return request.user.is_superuser or self.is_guild_admin(request) or self.is_association_admin(request)
 
     def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser or self.is_guild_admin(request)
+        # dean cannot edit anything
+        if self.is_dean(request):
+            return False
+
+        # superuser/guild can edit all
+        if request.user.is_superuser or self.is_guild_admin(request):
+            return True
+
+        # association admin: can only edit their own announcements
+        if self.is_association_admin(request):
+            if obj is None:
+                return True
+            return obj.posted_by_id == request.user.id
+
+        return False
 
     def has_delete_permission(self, request, obj=None):
+        # keep deletion only for superuser (safe)
         return request.user.is_superuser
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        # Everyone can see published announcements
-        if request.user.is_superuser or self.is_guild_admin(request):
+
+        # superuser sees all
+        if request.user.is_superuser:
             return qs
-        return qs.filter(is_published=True)
+
+        # guild admin sees all
+        if self.is_guild_admin(request):
+            return qs
+
+        # dean: ONLY published
+        if self.is_dean(request):
+            return qs.filter(is_published=True)
+
+        # association admin:
+        # - sees published global
+        # - sees published for their association
+        # - sees their own drafts/unpublished too
+        assoc_admin = self.is_association_admin(request)
+        if assoc_admin:
+            assoc = assoc_admin.association
+            return qs.filter(
+                models.Q(is_published=True, audience="all")
+                | models.Q(is_published=True, audience="association", association=assoc)
+                | models.Q(posted_by=request.user)
+            )
+
+        return qs.none()
 
     def save_model(self, request, obj, form, change):
-        if not change and not obj.created_by_id:
-            obj.created_by = request.user
+        if not change and not obj.posted_by_id:
+            obj.posted_by = request.user
+
+        # Association admins: force audience to association + lock association
+        assoc_admin = self.is_association_admin(request)
+        if assoc_admin and not (request.user.is_superuser or self.is_guild_admin(request)):
+            obj.audience = "association"
+            obj.association = assoc_admin.association
+            obj.faculty = None
+
         super().save_model(request, obj, form, change)
