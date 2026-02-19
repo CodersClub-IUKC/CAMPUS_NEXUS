@@ -10,7 +10,7 @@ try:
     from .theme_utils import get_association_theme
 except Exception:
     def get_association_theme(association):
-        
+
         name = getattr(association, "name", "association")
         # Minimal default CSS; adjust as needed.
         return "/* default theme for {} */\n:root {{ --association-name: \"{}\"; }}\n".format(name, name)
@@ -105,32 +105,39 @@ class Association(models.Model):
     theme_css_file = models.FileField(upload_to="associations/themes/", blank=True, null=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    from django.core.files.base import ContentFile
+
+
 
     def save(self, *args, **kwargs):
-        # Detect logo change
+        # Detect logo change BEFORE saving
+        logo_changed = False
         if self.pk:
-            assoc = Association.objects.filter(pk=self.pk).only("logo_image").first()
-            logo_changed = assoc and assoc.logo_image != self.logo_image
+            old = Association.objects.filter(pk=self.pk).only("logo_image").first()
+            if old:
+                logo_changed = old.logo_image != self.logo_image
         else:
             logo_changed = bool(self.logo_image)
 
-        # Save first to ensure logo has a real file path
+        # First save normally
         super().save(*args, **kwargs)
 
-        # If logo added/changed, regenerate CSS (best-effort, never crash)
+        # If logo changed, generate CSS WITHOUT triggering model save again
         if logo_changed and self.logo_image:
-            css_content = get_association_theme(self)  # may be str or None
+            css_content = get_association_theme(self)
 
-            # Only save when we got valid CSS text
             if isinstance(css_content, str) and css_content.strip():
-                self.theme_css_file.save(
-                    f"association_{self.id}.css",
-                    ContentFile(css_content.encode("utf-8")),
-                    save=False,
+                file_name = f"association_{self.id}.css"
+
+                # Assign file directly instead of calling .save()
+                self.theme_css_file = ContentFile(
+                    css_content.encode("utf-8"),
+                    name=file_name
                 )
-                super().save(update_fields=["theme_css_file"])
-            # else: do nothing (keep previous theme_css_file)
+
+                # Update DB directly without recursion
+                Association.objects.filter(pk=self.pk).update(
+                    theme_css_file=self.theme_css_file.name
+                )
 
 
     def __str__(self):
@@ -148,7 +155,7 @@ class Member(models.Model):
     last_name = models.CharField(max_length=50, default='')
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=15, validators=[RegexValidator(r'^\+?\d{9,15}$')])
-    
+
     registration_number = models.CharField(max_length=20, unique=True, null=True, blank=True, db_index=True)
     national_id_number = models.CharField(max_length=20, unique=True, null=True, blank=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_members')
@@ -170,7 +177,12 @@ class Member(models.Model):
             raise ValidationError("National ID number (NIN) is required for external members.")
 
     def __str__(self):
-        return f"{self.full_name} ({self.registration_number})"  
+        return f"{self.full_name} ({self.registration_number})"
+
+
+from django.db import models
+from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 class Membership(models.Model):
     STATUS_CHOICES = [
@@ -264,20 +276,20 @@ class Fee(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     duration_months = models.PositiveIntegerField(default=0)
 
-    # enforcement per association policy 
+    # enforcement per association policy
     grace_days = models.PositiveIntegerField(default=0)
     reminder_days_before_due = models.JSONField(default=list, blank=True)  # e.g. [14, 3]
-    max_missed_cycles = models.PositiveIntegerField(default=2)  
+    max_missed_cycles = models.PositiveIntegerField(default=2)
     created_at = models.DateTimeField(auto_now_add=True)
     allow_installments = models.BooleanField(default=True)
-    
+
     def save(self, *args, **kwargs):
         if self.fee_type == "subscription":
             self.reminder_days_before_due = [3]
         else:
             self.reminder_days_before_due = []
         super().save(*args, **kwargs)
-        
+
     def __str__(self):
         return f"{self.association.name} - {self.get_fee_type_display()} Fee - {self.amount}"
 
@@ -316,11 +328,11 @@ class Charge(models.Model):
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_charges")
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     period_start = models.DateField(null=True, blank=True)
     period_end = models.DateField(null=True, blank=True)
     is_overdue = models.BooleanField(default=False)
-    
+
     @property
     def balance(self):
         paid = self.amount_paid_total
@@ -355,7 +367,7 @@ class Charge(models.Model):
             self.status = "partial"
         else:
             self.status = "paid"
-            
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
