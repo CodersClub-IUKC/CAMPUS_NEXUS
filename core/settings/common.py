@@ -17,15 +17,15 @@ INSTALLED_APPS = [
     "django_extensions",
     "rest_framework",
     "rest_framework_simplejwt",
-    "debug_toolbar",
+    # debug_toolbar is added only in development.py
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # Must be right after SecurityMiddleware
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -127,7 +127,7 @@ JAZZMIN_SETTINGS = {
             "icon": "fas fa-user",
         },
         {"name": "Submit Feedback", "url": "admin:submit_feedback", "icon": "fas fa-bug"},
-        
+
     ],
     #############
     # Side Menu #
@@ -167,7 +167,7 @@ JAZZMIN_SETTINGS = {
     # Custom icons for side menu apps/models
     "icons": {
         "auth": "fas fa-users-cog",
-        "auth.user": "fas fa-user", 
+        "auth.user": "fas fa-user",
         "auth.group": "fas fa-users",
         "campus_nexus.associationadmin": "fas fa-user-shield",
         "campus_nexus.association": "fas fa-university",
@@ -255,5 +255,3 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Campus Nexus <no-reply@campusnexus.local>")
 SERVER_EMAIL = os.getenv("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
-
-
