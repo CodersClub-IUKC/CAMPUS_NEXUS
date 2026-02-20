@@ -8,11 +8,10 @@ ALLOWED_HOSTS = []
 from dotenv import load_dotenv
 load_dotenv()
 
-# SQLite is fine for dev (already in common)
-# You can add dev-only tools here:
-# INSTALLED_APPS += [
-#     "debug_toolbar",
-# ]
+# Add dev-only tools
+INSTALLED_APPS += [
+    "debug_toolbar",
+]
 
 # DATABASES = {
 #     "default": {

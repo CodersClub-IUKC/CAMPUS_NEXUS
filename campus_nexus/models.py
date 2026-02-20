@@ -106,8 +106,6 @@ class Association(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
-
-
     def save(self, *args, **kwargs):
         # Detect logo change BEFORE saving
         logo_changed = False
