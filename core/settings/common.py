@@ -102,7 +102,7 @@ JAZZMIN_SETTINGS = {
     # CSS classes that are applied to the logo above
     "site_logo_classes": "img-circle",
     # Relative path to a favicon for your site
-    "site_icon": "img/CAMPUS_NEXUS.png",
+    "site_icon": "img/favicon.ico",
     # Welcome text on the login screen
     "welcome_sign": "Welcome to Campus Nexus Administration",
     # Copyright on the footer
