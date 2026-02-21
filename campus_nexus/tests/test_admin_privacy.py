@@ -1,7 +1,9 @@
 from django.test import TestCase
 from django.contrib.admin.sites import AdminSite
+from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.test import RequestFactory
 
 from campus_nexus.models import Faculty, Association, Member, Membership
 
@@ -216,3 +218,30 @@ class AdminPrivacyIntegrationTests(TestCase):
         self.assertNotContains(resp, "fees-tab")
         self.assertNotContains(resp, "system-tab")
         self.assertNotContains(resp, "Total Members")
+
+    def test_assoc_admin_admin_app_list_hides_member_and_includes_expected_modules(self):
+        request = RequestFactory().get("/admin/")
+        request.user = self.assoc_admin_a
+
+        app_list = admin.site.get_app_list(request)
+        campus_app = next(a for a in app_list if a["app_label"] == "campus_nexus")
+
+        model_names = {m["object_name"].lower() for m in campus_app["models"]}
+        self.assertNotIn("member", model_names)
+        self.assertIn("faculty", model_names)
+        self.assertIn("course", model_names)
+        self.assertIn("membership", model_names)
+        self.assertIn("cabinet", model_names)
+        self.assertIn("cabinetmember", model_names)
+        self.assertIn("fee", model_names)
+        self.assertIn("guildcabinet", model_names)
+
+    def test_guild_admin_admin_app_list_hides_audit_log(self):
+        request = RequestFactory().get("/admin/")
+        request.user = self.guild_admin
+
+        app_list = admin.site.get_app_list(request)
+        campus_app = next(a for a in app_list if a["app_label"] == "campus_nexus")
+        model_names = {m["object_name"].lower() for m in campus_app["models"]}
+
+        self.assertNotIn("auditlog", model_names)
