@@ -1,0 +1,129 @@
+{% extends "registration/base.html" %}
+
+{% load i18n jazzmin %}
+{% get_jazzmin_settings request as jazzmin_settings %}
+{% get_jazzmin_ui_tweaks as jazzmin_ui %}
+
+{% block content %}
+    <p class="login-box-msg">{{ jazzmin_settings.welcome_sign }}</p>
+
+    {% if request.GET.locked and request.GET.lockout_until %}
+        <div class="callout callout-warning" id="lockout-note">
+            Too many failed login attempts. Try again in
+            <strong id="lockout-countdown">30</strong>
+            seconds.
+        </div>
+    {% endif %}
+
+    <form action="{{ app_path }}" method="post" id="login-form">
+        {% csrf_token %}
+        {% if user.is_authenticated %}
+            <p class="errornote">
+                <div class="callout callout-danger">
+                    <p>
+                        {% blocktrans trimmed %}
+                            You are authenticated as {{ username }}, but are not authorized to
+                            access this page. Would you like to login to a different account?
+                        {% endblocktrans %}
+                    </p>
+                </div>
+            </p>
+        {% endif %}
+        {% if form.errors %}
+            {% if form.username.errors %}
+                <div class="callout callout-danger">
+                    <p>{{ form.username.label }}: {{ form.username.errors|join:', ' }}</p>
+                </div>
+            {% endif %}
+            {% if form.password.errors %}
+                <div class="callout callout-danger">
+                    <p>{{ form.password.label }}: {{ form.password.errors|join:', ' }}</p>
+                </div>
+            {% endif %}
+            {% if form.non_field_errors %}
+                <div class="callout callout-danger">
+                    {% for error in form.non_field_errors %}
+                        <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endif %}
+        <div class="input-group mb-3">
+            <input id="id_username" type="text" name="username" class="form-control" placeholder="{{ form.username.label }}" required>
+            <div class="input-group-append">
+                <div class="input-group-text">
+                    <span class="fas fa-user"></span>
+                </div>
+            </div>
+        </div>
+        <div class="input-group mb-3">
+            <input id="id_password" type="password" name="password" class="form-control" placeholder="{{ form.password.label }}" required>
+            <div class="input-group-append">
+                <div class="input-group-text">
+                    <span class="fas fa-lock"></span>
+                </div>
+            </div>
+        </div>
+        {% url 'admin_password_reset' as password_reset_url %}
+        {% if password_reset_url %}
+            <div class="mb-3">
+                <div class="password-reset-link" style="text-align: center;">
+                    <a href="{{ password_reset_url }}">
+                        {% trans 'Forgotten your password or username?' %}
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+        <div class="row">
+            <div class="col-12">
+                <button id="login-submit-btn" type="submit" class="btn {{ jazzmin_ui.button_classes.primary }} btn-block">
+                    {% trans "Log in" %}
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const lockUntil = parseInt(params.get("lockout_until") || "", 10);
+      const username = params.get("username") || "";
+      const countdown = document.getElementById("lockout-countdown");
+      const note = document.getElementById("lockout-note");
+      const usernameInput = document.getElementById("id_username");
+      const passwordInput = document.getElementById("id_password");
+      const submitBtn = document.getElementById("login-submit-btn");
+
+      if (usernameInput && username && !usernameInput.value) {
+        usernameInput.value = username;
+      }
+      if (!lockUntil || !countdown || !submitBtn) {
+        return;
+      }
+
+      let timerId = null;
+      function tick() {
+        const now = Math.floor(Date.now() / 1000);
+        const remaining = Math.max(0, lockUntil - now);
+        countdown.textContent = String(remaining);
+
+        const isLocked = remaining > 0;
+        submitBtn.disabled = isLocked;
+        if (passwordInput) passwordInput.disabled = isLocked;
+
+        if (!isLocked) {
+          if (note) note.textContent = "You can try logging in again now.";
+          params.delete("locked");
+          params.delete("lockout_until");
+          const nextQuery = params.toString();
+          const nextUrl = nextQuery ? (window.location.pathname + "?" + nextQuery) : window.location.pathname;
+          window.history.replaceState({}, "", nextUrl);
+          if (timerId) clearInterval(timerId);
+        }
+      }
+
+      tick();
+      timerId = setInterval(tick, 1000);
+    })();
+    </script>
+{% endblock %}
