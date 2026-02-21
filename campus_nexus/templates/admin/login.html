@@ -1,0 +1,121 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{% if form.errors %}{% translate "Error:" %} {% endif %}{{ block.super }}{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static "admin/css/login.css" %}">
+{{ form.media }}
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} login{% endblock %}
+
+{% block usertools %}{% endblock %}
+{% block nav-global %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+{% block content_title %}{% endblock %}
+{% block nav-breadcrumbs %}{% endblock %}
+
+{% block content %}
+{% if form.errors and not form.non_field_errors %}
+<p class="errornote">
+{% blocktranslate count counter=form.errors.items|length %}Please correct the error below.{% plural %}Please correct the errors below.{% endblocktranslate %}
+</p>
+{% endif %}
+
+{% if form.non_field_errors %}
+{% for error in form.non_field_errors %}
+<p class="errornote">
+    {{ error }}
+</p>
+{% endfor %}
+{% endif %}
+
+{% if request.GET.locked and request.GET.lockout_until %}
+<p class="errornote" id="lockout-note">
+  Too many failed login attempts. Try again in
+  <strong id="lockout-countdown">30</strong>
+  seconds.
+</p>
+{% endif %}
+
+<div id="content-main">
+{% if user.is_authenticated %}
+<p class="errornote">
+{% blocktranslate trimmed %}
+    You are authenticated as {{ username }}, but are not authorized to
+    access this page. Would you like to login to a different account?
+{% endblocktranslate %}
+</p>
+{% endif %}
+
+<form action="{{ app_path }}" method="post" id="login-form">{% csrf_token %}
+  <div class="form-row">
+    {{ form.username.errors }}
+    {{ form.username.label_tag }} {{ form.username }}
+  </div>
+  <div class="form-row">
+    {{ form.password.errors }}
+    {{ form.password.label_tag }} {{ form.password }}
+    <input type="hidden" name="next" value="{{ next }}">
+  </div>
+  {% url 'admin_password_reset' as password_reset_url %}
+  {% if password_reset_url %}
+  <div class="password-reset-link">
+    <a href="{{ password_reset_url }}">{% translate 'Forgotten your login credentials?' %}</a>
+  </div>
+  {% endif %}
+  <div class="submit-row">
+    <input type="submit" value="{% translate 'Log in' %}">
+  </div>
+</form>
+</div>
+
+<script>
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  const lockUntil = parseInt(params.get("lockout_until") || "", 10);
+  const username = params.get("username") || "";
+  const userInput = document.getElementById("id_username");
+  const passwordInput = document.getElementById("id_password");
+  const submitBtn = document.querySelector("#login-form input[type='submit']");
+  const note = document.getElementById("lockout-note");
+  const countdown = document.getElementById("lockout-countdown");
+
+  if (userInput && username && !userInput.value) {
+    userInput.value = username;
+  }
+
+  if (!lockUntil || !countdown || !submitBtn) {
+    return;
+  }
+
+  let timerId = null;
+
+  function tick() {
+    const now = Math.floor(Date.now() / 1000);
+    const remaining = Math.max(0, lockUntil - now);
+    countdown.textContent = String(remaining);
+
+    const locked = remaining > 0;
+    submitBtn.disabled = locked;
+    if (passwordInput) {
+      passwordInput.disabled = locked;
+    }
+
+    if (!locked && note) {
+      note.textContent = "You can try logging in again now.";
+      params.delete("locked");
+      params.delete("lockout_until");
+      const next = params.toString();
+      const target = next ? (window.location.pathname + "?" + next) : window.location.pathname;
+      window.history.replaceState({}, "", target);
+      if (timerId) {
+        clearInterval(timerId);
+      }
+    }
+  }
+
+  tick();
+  timerId = setInterval(tick, 1000);
+})();
+</script>
+{% endblock %}

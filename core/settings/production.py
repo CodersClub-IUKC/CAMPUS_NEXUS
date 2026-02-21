@@ -1,24 +1,36 @@
 from .common import *
 import os
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+def _require_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise ImproperlyConfigured(f"Missing required environment variable: {name}")
+    return value
+
+SECRET_KEY = _require_env("DJANGO_SECRET_KEY")
 
 DEBUG = False
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+if not ALLOWED_HOSTS:
+    raise ImproperlyConfigured("Missing required environment variable: ALLOWED_HOSTS")
 
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin.strip()
+]
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('DB_NAME', 'codemsdx_campusnexus_db'),
-        'USER': os.getenv('DB_USER', 'codemsdx_nexus_admin'),
-        'PASSWORD': os.getenv('DB_PASSWORD', ''),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
+        'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.mysql'),
+        'NAME': _require_env('DB_NAME'),
+        'USER': _require_env('DB_USER'),
+        'PASSWORD': _require_env('DB_PASSWORD'),
+        'HOST': _require_env('DB_HOST'),
         'PORT': os.getenv('DB_PORT', '3306'),
         'OPTIONS': {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
