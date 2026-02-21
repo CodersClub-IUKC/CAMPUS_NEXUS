@@ -169,7 +169,6 @@ class AdminPrivacyIntegrationTests(TestCase):
         ids = {item.get("id") for item in data.get("results", [])}
         self.assertIn(str(self.member_1.id), ids)
 
-
         # Search by regno substring
         resp = self.client.get(
             url,
@@ -198,3 +197,22 @@ class AdminPrivacyIntegrationTests(TestCase):
         data = resp.json()
         ids = {item.get("id") for item in data.get("results", [])}
         self.assertIn(str(self.member_1.id), ids)
+
+    def test_assoc_admin_on_own_association_sees_membership_fee_and_system_tabs(self):
+        self.client.login(username="assocA", password="pass12345")
+        url = reverse("admin:campus_nexus_association_change", args=[self.assoc_a.id])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "memberships-tab")
+        self.assertContains(resp, "fees-tab")
+        self.assertContains(resp, "system-tab")
+
+    def test_assoc_admin_on_other_association_hides_membership_fee_and_system_tabs(self):
+        self.client.login(username="assocA", password="pass12345")
+        url = reverse("admin:campus_nexus_association_change", args=[self.assoc_b.id])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "memberships-tab")
+        self.assertNotContains(resp, "fees-tab")
+        self.assertNotContains(resp, "system-tab")
+        self.assertNotContains(resp, "Total Members")

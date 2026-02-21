@@ -463,6 +463,41 @@ class PaymentReminderLog(models.Model):
         return f"{self.membership} | {self.charge} | {self.reminder_type} @ {self.scheduled_for}"
 
 
+class AuditLog(models.Model):
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
+    association = models.ForeignKey(
+        "Association",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
+    action = models.CharField(max_length=64)
+    model_name = models.CharField(max_length=120)
+    object_id = models.CharField(max_length=64, blank=True, default="")
+    object_repr = models.CharField(max_length=255, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["action"]),
+            models.Index(fields=["model_name"]),
+            models.Index(fields=["association", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.created_at} | {self.action} | {self.model_name}#{self.object_id}"
+
+
 class Event(models.Model):
     association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name='events')
     title = models.CharField(max_length=200)
