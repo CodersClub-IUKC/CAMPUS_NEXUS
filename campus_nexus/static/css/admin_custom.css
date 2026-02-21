@@ -16,7 +16,7 @@ body.jazzmin-login-page {
     min-height: 100vh;
     background-image:
         linear-gradient(125deg, rgba(8, 28, 21, 0.58), rgba(27, 67, 50, 0.48)),
-        url("/static/img/home.jpg");
+        url("https://www.iuiu.ac.ug/assets/images/home/islamic-university-in-uganda.jpg");
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
