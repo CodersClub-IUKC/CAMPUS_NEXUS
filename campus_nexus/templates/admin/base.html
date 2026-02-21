@@ -150,6 +150,61 @@
 
     addCenteredGlobalSearch();
     
+    // Login lockout countdown (non-invasive: no layout changes)
+    (function () {
+        if (!window.location.pathname.startsWith("/admin/login/")) return;
+
+        const params = new URLSearchParams(window.location.search);
+        const lockUntil = parseInt(params.get("lockout_until") || "", 10);
+        if (!lockUntil) return;
+
+        const form = document.getElementById("login-form");
+        if (!form) return;
+
+        const username = params.get("username") || "";
+        const usernameInput = document.getElementById("id_username");
+        if (usernameInput && username && !usernameInput.value) {
+            usernameInput.value = username;
+        }
+
+        let note = document.getElementById("lockout-note");
+        if (!note) {
+            note = document.createElement("p");
+            note.id = "lockout-note";
+            note.className = "errornote";
+            form.parentNode.insertBefore(note, form);
+        }
+
+        const submitBtn = form.querySelector("input[type='submit']");
+        const passwordInput = document.getElementById("id_password");
+        let timerId = null;
+
+        function tick() {
+            const now = Math.floor(Date.now() / 1000);
+            const remaining = Math.max(0, lockUntil - now);
+
+            note.textContent = remaining > 0
+                ? "Too many failed login attempts. Try again in " + remaining + " seconds."
+                : "You can try logging in again now.";
+
+            const locked = remaining > 0;
+            if (submitBtn) submitBtn.disabled = locked;
+            if (passwordInput) passwordInput.disabled = locked;
+
+            if (!locked) {
+                params.delete("locked");
+                params.delete("lockout_until");
+                const nextQuery = params.toString();
+                const target = nextQuery ? (window.location.pathname + "?" + nextQuery) : window.location.pathname;
+                window.history.replaceState({}, "", target);
+                if (timerId) clearInterval(timerId);
+            }
+        }
+
+        tick();
+        timerId = setInterval(tick, 1000);
+    })();
+
     {% if request.user.is_authenticated and request.user.dean %}
 <script>
   // Hide add buttons + inline add rows for dean everywhere
