@@ -1,8 +1,20 @@
 import json
+from decimal import Decimal
+
 from django import template
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.db.models import Q
-from campus_nexus.models import Association, Member, Membership, Event, Announcement
+from django.utils import timezone
+
+from campus_nexus.models import (
+    Announcement,
+    Association,
+    Charge,
+    Event,
+    Member,
+    Membership,
+    Payment,
+)
 
 register = template.Library()
 
@@ -144,6 +156,42 @@ def association_dashboard_data(context):
         Membership.objects.filter(association=assoc).values("member_id").distinct().count()
     )
     total_events = Event.objects.filter(association=assoc).count()
+    charges_qs = Charge.objects.filter(association=assoc).exclude(status="cancelled")
+
+    total_billed = charges_qs.aggregate(total=Sum("amount_due")).get("total") or Decimal("0.00")
+
+    total_collected = (
+        Payment.objects.filter(membership__association=assoc, status="recorded")
+        .aggregate(total=Sum("amount_paid"))
+        .get("total")
+        or Decimal("0.00")
+    )
+
+    outstanding_balance = Decimal("0.00")
+    open_charges_qs = charges_qs.filter(status__in=["unpaid", "partial"]).annotate(
+        paid_total=Sum("payments__amount_paid", filter=Q(payments__status="recorded"))
+    )
+    for charge in open_charges_qs:
+        paid_total = charge.paid_total or Decimal("0.00")
+        remaining = charge.amount_due - paid_total
+        if remaining > 0:
+            outstanding_balance += remaining
+
+    overdue_charges_count = charges_qs.filter(is_overdue=True, status__in=["unpaid", "partial"]).count()
+    open_charges_count = charges_qs.filter(status__in=["unpaid", "partial"]).count()
+
+    today = timezone.localdate()
+    this_month_collected = (
+        Payment.objects.filter(
+            membership__association=assoc,
+            status="recorded",
+            paid_at__year=today.year,
+            paid_at__month=today.month,
+        )
+        .aggregate(total=Sum("amount_paid"))
+        .get("total")
+        or Decimal("0.00")
+    )
 
     # Assoc admin sees:
     # - published global
@@ -163,5 +211,13 @@ def association_dashboard_data(context):
         "association_name": assoc.name,
         "total_members": total_members,
         "total_events": total_events,
+        "finance": {
+            "total_billed": total_billed,
+            "total_collected": total_collected,
+            "outstanding_balance": outstanding_balance,
+            "overdue_charges_count": overdue_charges_count,
+            "open_charges_count": open_charges_count,
+            "this_month_collected": this_month_collected,
+        },
         "announcements": {"latest": latest_announcements},
     }

@@ -56,7 +56,7 @@ class AdminLoginRateLimitMiddleware:
             return self.get_response(request)
 
         max_attempts = int(getattr(settings, "ADMIN_LOGIN_MAX_ATTEMPTS", 5))
-        lockout_seconds = int(getattr(settings, "ADMIN_LOGIN_LOCKOUT_SECONDS", 900))
+        lockout_seconds = int(getattr(settings, "ADMIN_LOGIN_LOCKOUT_SECONDS", 30))
         if max_attempts <= 0:
             return self.get_response(request)
 

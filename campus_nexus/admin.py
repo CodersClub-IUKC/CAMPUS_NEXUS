@@ -28,14 +28,23 @@ class CheckUserIdentityMixin:
     def is_superuser(self, request):
         return request.user.is_superuser
 
-    def is_association_admin(self, request):
+    def get_association_admin(self, request):
         return getattr(request.user, "association_admin", None)
 
-    def is_guild_admin(self, request):
+    def is_association_admin(self, request):
+        return self.get_association_admin(request) is not None
+
+    def get_guild_admin(self, request):
         return getattr(request.user, "guild", None)
 
-    def is_dean(self, request):
+    def is_guild_admin(self, request):
+        return self.get_guild_admin(request) is not None
+
+    def get_dean(self, request):
         return getattr(request.user, "dean", None)
+
+    def is_dean(self, request):
+        return self.get_dean(request) is not None
 
 
 
@@ -887,7 +896,7 @@ class CabinetMemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             return qs
 
         # Association admin: only their association
-        if assoc_admin := self.is_association_admin(request):
+        if assoc_admin := self.get_association_admin(request):
             return qs.filter(cabinet__association=assoc_admin.association)
 
         return qs.none()
@@ -1450,7 +1459,7 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         if request.user.is_superuser:
             return True
 
-        assoc_admin = self.is_association_admin(request)
+        assoc_admin = self.get_association_admin(request)
         if not assoc_admin:
             return False
 
@@ -1471,7 +1480,7 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         if request.user.is_superuser:
             return True
 
-        assoc_admin = self.is_association_admin(request)
+        assoc_admin = self.get_association_admin(request)
         if not assoc_admin:
             return False
 
@@ -1486,7 +1495,7 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         if request.user.is_superuser:
             return True
 
-        assoc_admin = self.is_association_admin(request)
+        assoc_admin = self.get_association_admin(request)
         if not assoc_admin:
             return False
 
@@ -1524,7 +1533,7 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             return qs.none()
 
         # Association admin: only own association
-        if assoc_admin := self.is_association_admin(request):
+        if assoc_admin := self.get_association_admin(request):
             return qs.filter(membership__association=assoc_admin.association)
 
         return qs.none()
@@ -1545,7 +1554,7 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 
         # HARD SAFETY: association admins can only record for their association
         if not request.user.is_superuser:
-            assoc_admin = self.is_association_admin(request)
+            assoc_admin = self.get_association_admin(request)
             if not assoc_admin:
                 raise PermissionDenied("You are not allowed to record payments.")
             if obj.membership.association_id != assoc_admin.association_id:
@@ -1725,7 +1734,7 @@ class AuditLogAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
     ordering = ("-created_at",)
 
     def has_module_permission(self, request):
-        return request.user.is_superuser or bool(self.is_guild_admin(request))
+        return request.user.is_superuser
 
     def has_view_permission(self, request, obj=None):
         return self.has_module_permission(request)
@@ -1934,7 +1943,7 @@ class AnnouncementAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         # - sees published global
         # - sees published for their association
         # - sees their own drafts/unpublished too
-        assoc_admin = self.is_association_admin(request)
+        assoc_admin = self.get_association_admin(request)
         if assoc_admin:
             assoc = assoc_admin.association
             return qs.filter(
@@ -1950,7 +1959,7 @@ class AnnouncementAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             obj.posted_by = request.user
 
         # Association admins: force audience to association + lock association
-        assoc_admin = self.is_association_admin(request)
+        assoc_admin = self.get_association_admin(request)
         if assoc_admin and not (request.user.is_superuser or self.is_guild_admin(request)):
             obj.audience = "association"
             obj.association = assoc_admin.association
