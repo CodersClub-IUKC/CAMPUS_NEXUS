@@ -1,8 +1,46 @@
 {% extends "registration/base.html" %}
 
-{% load i18n jazzmin %}
+{% load i18n static jazzmin %}
 {% get_jazzmin_settings request as jazzmin_settings %}
 {% get_jazzmin_ui_tweaks as jazzmin_ui %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  body.hold-transition.jazzmin-login-page {
+    background-image:
+      linear-gradient(125deg, rgba(8, 28, 21, 0.64), rgba(27, 67, 50, 0.54)),
+      url("https://www.iuiu.ac.ug/assets/images/home/islamic-university-in-uganda.jpg"),
+      url("{% static 'img/home.jpg' %}") !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-attachment: fixed !important;
+  }
+
+  body.hold-transition.jazzmin-login-page::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: none;
+  }
+
+  body.hold-transition.jazzmin-login-page .login-box {
+    position: relative;
+    z-index: 1;
+  }
+
+  body.hold-transition.jazzmin-login-page .login-box .card {
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.34);
+    background: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.33);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+</style>
+{% endblock %}
 
 {% block content %}
     <p class="login-box-msg">{{ jazzmin_settings.welcome_sign }}</p>
