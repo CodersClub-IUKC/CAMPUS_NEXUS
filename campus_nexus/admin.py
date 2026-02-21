@@ -19,6 +19,7 @@ from .finance_utils import get_or_create_charge_for_fee, create_charge_custom
 from .notifications.email_utils import send_payment_recorded_email
 from campus_nexus.services.subscriptions import ensure_current_subscription_charge, recompute_overdue_flags_for_association
 from campus_nexus.services.subscription_emails import send_subscription_reminder_email
+from campus_nexus.services.audit import record_audit_event
 
 # ---------------------------------------------------------------------
 # Mixins
@@ -27,14 +28,23 @@ class CheckUserIdentityMixin:
     def is_superuser(self, request):
         return request.user.is_superuser
 
-    def is_association_admin(self, request):
+    def get_association_admin(self, request):
         return getattr(request.user, "association_admin", None)
 
-    def is_guild_admin(self, request):
+    def is_association_admin(self, request):
+        return self.get_association_admin(request) is not None
+
+    def get_guild_admin(self, request):
         return getattr(request.user, "guild", None)
 
-    def is_dean(self, request):
+    def is_guild_admin(self, request):
+        return self.get_guild_admin(request) is not None
+
+    def get_dean(self, request):
         return getattr(request.user, "dean", None)
+
+    def is_dean(self, request):
+        return self.get_dean(request) is not None
 
 
 
@@ -356,6 +366,12 @@ class AssociationModelAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 )
     
     change_form_template = "admin/campus_nexus/association/change_form.html"
+
+    def _is_own_association_page(self, request, obj):
+        assoc_admin = getattr(request.user, "association_admin", None)
+        if not assoc_admin or not obj:
+            return False
+        return obj.id == assoc_admin.association_id
     
     def president_name(self, obj):
         admin_obj = getattr(obj, "associationadmin", None) or getattr(obj, "association_admin", None)
@@ -461,9 +477,27 @@ class AssociationModelAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 
         return fields
 
+    def get_fieldsets(self, request, obj=None):
+        # Association admin viewing another association: hide sensitive/system sections.
+        if self.is_association_admin(request) and obj and not self._is_own_association_page(request, obj):
+            return (
+                ("Overview", {"fields": ("name", "faculty")}),
+                ("Branding", {"fields": self.BRANDING_FIELDS}),
+            )
+        return self.fieldsets
+
+    def get_inlines(self, request, obj=None):
+        # Association admin viewing another association: hide Memberships and Fees tabs.
+        if self.is_association_admin(request) and obj and not self._is_own_association_page(request, obj):
+            return [AssociationPresidentInline, CabinetInline]
+        return self.inlines
+
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
         obj = self.get_object(request, object_id)
+        is_other_assoc_for_assoc_admin = (
+            self.is_association_admin(request) and obj and not self._is_own_association_page(request, obj)
+        )
 
         members_count = Membership.objects.filter(association=obj).values("member_id").distinct().count()
         events_count = Event.objects.filter(association=obj).count()
@@ -472,6 +506,10 @@ class AssociationModelAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         )
 
         stats_cards = []
+
+        if is_other_assoc_for_assoc_admin:
+            extra_context["stats_cards"] = stats_cards
+            return super().change_view(request, object_id, form_url, extra_context=extra_context)
 
         # always allowed cards (for everyone who can view this association)
         stats_cards.append({"label": "Total Members", "value": members_count})
@@ -697,6 +735,9 @@ class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
     # -----------------------------
     def save_model(self, request, obj, form, change):
         is_new = obj.pk is None
+        old_status = None
+        if change and obj.pk:
+            old_status = Membership.objects.filter(pk=obj.pk).values_list("status", flat=True).first()
 
         if self.is_association_admin(request) and not (request.user.is_superuser or self.is_guild_admin(request)):
             obj.association = request.user.association_admin.association
@@ -709,6 +750,21 @@ class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             obj.status = "active"
 
         super().save_model(request, obj, form, change)
+        if is_new:
+            action = "membership_created"
+        elif old_status != obj.status:
+            action = "membership_status_changed"
+        else:
+            action = "membership_updated"
+        record_audit_event(
+            actor=request.user,
+            action=action,
+            obj=obj,
+            metadata={
+                "old_status": old_status or "",
+                "new_status": str(obj.status),
+            },
+        )
 
 @admin.register(Cabinet)
 class CabinetAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
@@ -840,7 +896,7 @@ class CabinetMemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             return qs
 
         # Association admin: only their association
-        if assoc_admin := self.is_association_admin(request):
+        if assoc_admin := self.get_association_admin(request):
             return qs.filter(cabinet__association=assoc_admin.association)
 
         return qs.none()
@@ -853,6 +909,8 @@ SUB_FIELDS = (
     "max_missed_cycles",
     "allow_installments",
 )
+
+
 class FeeAdminForm(forms.ModelForm):
     """
     - For Association Admins: association field is removed and auto-set in admin.save_model()
@@ -869,21 +927,16 @@ class FeeAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         # Help texts
-        self.fields["duration_months"].help_text = (
-            "Subscription only. E.g. 4 means pay every 4 months. 12 means yearly."
-        )
-        self.fields["grace_days"].help_text = (
-            "Subscription only. Extra days after due date before marking overdue."
-        )
-        self.fields["reminder_days_before_due"].help_text = (
-            "Subscription only. Example: [14, 3] sends reminders 14 and 3 days before due."
-        )
-        self.fields["max_missed_cycles"].help_text = (
-            "Subscription only. After this many missed cycles, member can be marked inactive."
-        )
-        self.fields["allow_installments"].help_text = (
-            "Subscription only. Allow partial payments to clear the charge."
-        )
+        help_texts = {
+            "duration_months": "Subscription only. E.g. 4 means pay every 4 months. 12 means yearly.",
+            "grace_days": "Subscription only. Extra days after due date before marking overdue.",
+            "reminder_days_before_due": "Subscription only. Example: [14, 3] sends reminders 14 and 3 days before due.",
+            "max_missed_cycles": "Subscription only. After this many missed cycles, member can be marked inactive.",
+            "allow_installments": "Subscription only. Allow partial payments to clear the charge.",
+        }
+        for field_name, text in help_texts.items():
+            if field_name in self.fields:
+                self.fields[field_name].help_text = text
 
         # If association admin: remove association field (since they are already inside their association)
         user = getattr(self.request, "user", None)
@@ -891,16 +944,25 @@ class FeeAdminForm(forms.ModelForm):
         if assoc_admin and "association" in self.fields:
             self.fields.pop("association")
 
-        # If membership fee: make subscription fields optional on the form level
-        fee_type = self.initial.get("fee_type") or getattr(self.instance, "fee_type", None)
+        # These are policy fields: avoid field-level "required" errors when hidden by JS.
+        for field_name in SUB_FIELDS:
+            if field_name in self.fields:
+                self.fields[field_name].required = False
+
+        fee_type = self._selected_fee_type()
         if fee_type == "membership":
             for f in SUB_FIELDS:
                 if f in self.fields:
                     self.fields[f].required = False
 
+    def _selected_fee_type(self):
+        if self.is_bound:
+            return self.data.get(self.add_prefix("fee_type"))
+        return self.initial.get("fee_type") or getattr(self.instance, "fee_type", None)
+
     def clean(self):
         cleaned = super().clean()
-        fee_type = cleaned.get("fee_type")
+        fee_type = cleaned.get("fee_type") or self._selected_fee_type()
 
         if fee_type == "subscription":
             duration = cleaned.get("duration_months") or 0
@@ -915,11 +977,14 @@ class FeeAdminForm(forms.ModelForm):
                     "max_missed_cycles": "Required for Subscription. Must be at least 1."
                 })
 
-            days = cleaned.get("reminder_days_before_due") or []
-            if not isinstance(days, list) or any((not isinstance(x, int) or x < 0) for x in days):
-                raise ValidationError({
-                    "reminder_days_before_due": "Enter a JSON list of non-negative integers. Example: [14, 3]."
-                })
+            if "reminder_days_before_due" in self.fields:
+                days = cleaned.get("reminder_days_before_due") or []
+                if not isinstance(days, list) or any((not isinstance(x, int) or x < 0) for x in days):
+                    raise ValidationError({
+                        "reminder_days_before_due": "Enter a JSON list of non-negative integers. Example: [14, 3]."
+                    })
+            else:
+                cleaned["reminder_days_before_due"] = cleaned.get("reminder_days_before_due") or []
 
         else:
             # membership fee: reset subscription policy fields to safe defaults
@@ -1011,9 +1076,32 @@ class FeeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 
     # ---- Auto-set association ----
     def save_model(self, request, obj, form, change):
+        old_obj = None
+        if change and obj.pk:
+            old_obj = Fee.objects.filter(pk=obj.pk).first()
+
         if self.is_association_admin(request) and not (request.user.is_superuser or self.is_guild_admin(request)):
             obj.association = request.user.association_admin.association
         super().save_model(request, obj, form, change)
+        record_audit_event(
+            actor=request.user,
+            action="fee_updated" if change else "fee_created",
+            obj=obj,
+            metadata={
+                "fee_type": str(obj.fee_type),
+                "amount": str(obj.amount),
+                "previous_amount": str(old_obj.amount) if old_obj else "",
+            },
+        )
+
+    def delete_model(self, request, obj):
+        record_audit_event(
+            actor=request.user,
+            action="fee_deleted",
+            obj=obj,
+            metadata={"fee_type": str(obj.fee_type), "amount": str(obj.amount)},
+        )
+        super().delete_model(request, obj)
 
 @admin.register(Charge)
 class ChargeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
@@ -1371,7 +1459,7 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         if request.user.is_superuser:
             return True
 
-        assoc_admin = self.is_association_admin(request)
+        assoc_admin = self.get_association_admin(request)
         if not assoc_admin:
             return False
 
@@ -1392,7 +1480,7 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         if request.user.is_superuser:
             return True
 
-        assoc_admin = self.is_association_admin(request)
+        assoc_admin = self.get_association_admin(request)
         if not assoc_admin:
             return False
 
@@ -1407,7 +1495,7 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         if request.user.is_superuser:
             return True
 
-        assoc_admin = self.is_association_admin(request)
+        assoc_admin = self.get_association_admin(request)
         if not assoc_admin:
             return False
 
@@ -1445,7 +1533,7 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             return qs.none()
 
         # Association admin: only own association
-        if assoc_admin := self.is_association_admin(request):
+        if assoc_admin := self.get_association_admin(request):
             return qs.filter(membership__association=assoc_admin.association)
 
         return qs.none()
@@ -1460,9 +1548,13 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         - If fee selected → reuse/create fee charge (subscription -> current cycle)
         - Else → create a custom charge (event/merch/donation/other)
         """
+        old_status = None
+        if change and obj.pk:
+            old_status = Payment.objects.filter(pk=obj.pk).values_list("status", flat=True).first()
+
         # HARD SAFETY: association admins can only record for their association
         if not request.user.is_superuser:
-            assoc_admin = self.is_association_admin(request)
+            assoc_admin = self.get_association_admin(request)
             if not assoc_admin:
                 raise PermissionDenied("You are not allowed to record payments.")
             if obj.membership.association_id != assoc_admin.association_id:
@@ -1508,6 +1600,23 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             payment=obj,
             charge=obj.charge,
         ))
+        record_audit_event(
+            actor=request.user,
+            action="payment_recorded" if not change else "payment_updated",
+            obj=obj,
+            metadata={
+                "amount_paid": str(obj.amount_paid),
+                "status": str(obj.status),
+                "charge_id": str(obj.charge_id or ""),
+            },
+        )
+        if old_status != "reversed" and obj.status == "reversed":
+            record_audit_event(
+                actor=request.user,
+                action="payment_reversed",
+                obj=obj,
+                metadata={"previous_status": str(old_status or "")},
+            )
 
 @admin.register(Event)
 class EventAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
@@ -1605,6 +1714,40 @@ class EventAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             raise ValidationError("posted_by must be a membership in the same association as the event.")
 
         super().save_model(request, obj, form, change)
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = ("created_at", "action", "model_name", "object_repr", "actor", "association")
+    list_filter = ("action", "model_name", "association", "created_at")
+    search_fields = ("object_repr", "object_id", "actor__username", "association__name")
+    readonly_fields = (
+        "created_at",
+        "action",
+        "model_name",
+        "object_id",
+        "object_repr",
+        "actor",
+        "association",
+        "metadata",
+    )
+    ordering = ("-created_at",)
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(Feedback)
 class FeedbackAdmin(admin.ModelAdmin):
@@ -1800,7 +1943,7 @@ class AnnouncementAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         # - sees published global
         # - sees published for their association
         # - sees their own drafts/unpublished too
-        assoc_admin = self.is_association_admin(request)
+        assoc_admin = self.get_association_admin(request)
         if assoc_admin:
             assoc = assoc_admin.association
             return qs.filter(
@@ -1816,7 +1959,7 @@ class AnnouncementAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             obj.posted_by = request.user
 
         # Association admins: force audience to association + lock association
-        assoc_admin = self.is_association_admin(request)
+        assoc_admin = self.get_association_admin(request)
         if assoc_admin and not (request.user.is_superuser or self.is_guild_admin(request)):
             obj.audience = "association"
             obj.association = assoc_admin.association

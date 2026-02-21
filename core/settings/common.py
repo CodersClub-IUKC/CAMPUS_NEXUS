@@ -24,6 +24,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",  # Must be right after SecurityMiddleware
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "campus_nexus.middleware.AdminLoginRateLimitMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -31,6 +32,10 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # "campus_nexus.middleware.AssociationWhiteLabellingMiddleware",
 ]
+
+ENABLE_ADMIN_LOGIN_RATE_LIMIT = os.getenv("ENABLE_ADMIN_LOGIN_RATE_LIMIT", "true").lower() == "true"
+ADMIN_LOGIN_MAX_ATTEMPTS = int(os.getenv("ADMIN_LOGIN_MAX_ATTEMPTS", "5"))
+ADMIN_LOGIN_LOCKOUT_SECONDS = int(os.getenv("ADMIN_LOGIN_LOCKOUT_SECONDS", "30"))
 
 ROOT_URLCONF = "core.urls"
 
@@ -147,7 +152,7 @@ JAZZMIN_SETTINGS = {
         "campus_nexus",
         "campus_nexus.associationadmin",
         "campus_nexus.association",
-        "campus_nexus.cabinet_member",
+        "campus_nexus.cabinetmember",
         "campus_nexus.cabinet",
         "campus_nexus.course",
         "campus_nexus.event",
@@ -229,13 +234,6 @@ JAZZMIN_UI_TWEAKS = {
         "success": "btn-success",
     },
     "actions_sticky_top": False,
-}
-
-REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ),
-    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
 }
 
 ASSOCIATION_DEFAULT_THEME = ("#3b82f6", "#64748b")
