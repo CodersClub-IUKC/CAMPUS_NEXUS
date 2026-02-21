@@ -8,10 +8,11 @@ ALLOWED_HOSTS = []
 from dotenv import load_dotenv
 load_dotenv()
 
-# Add dev-only tools
-INSTALLED_APPS += [
-    "debug_toolbar",
-]
+# Add dev-only tools (guarded to avoid duplicate app labels)
+if "debug_toolbar" not in INSTALLED_APPS:
+    INSTALLED_APPS += [
+        "debug_toolbar",
+    ]
 
 # DATABASES = {
 #     "default": {
@@ -27,14 +28,10 @@ DATABASES = {
     }
 }
 
-INSTALLED_APPS += [
-    "debug_toolbar",
-]
-
-
-MIDDLEWARE += [
-    "debug_toolbar.middleware.DebugToolbarMiddleware",
-]
+if "debug_toolbar.middleware.DebugToolbarMiddleware" not in MIDDLEWARE:
+    MIDDLEWARE += [
+        "debug_toolbar.middleware.DebugToolbarMiddleware",
+    ]
 
 INTERNAL_IPS = ["127.0.0.1"]
 
