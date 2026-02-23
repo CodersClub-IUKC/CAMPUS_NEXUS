@@ -612,6 +612,7 @@ class Feedback(models.Model):
 
 
 class GuildCabinet(models.Model):
+    name = models.CharField(max_length=120, default="Guild Cabinet")
     year = models.CharField(max_length=10)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -620,7 +621,7 @@ class GuildCabinet(models.Model):
         ordering = ("-year",)
 
     def __str__(self):
-        return f"Guild Cabinet ({self.year})"
+        return f"{self.name} ({self.year})"
 
 
 class GuildExecutive(models.Model):
