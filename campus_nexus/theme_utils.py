@@ -9,6 +9,7 @@ from colorthief import ColorThief
 from django.contrib.staticfiles import finders
 from django.conf import settings
 from django.template import Engine, Context
+from django.core.files.storage import default_storage
 from PIL import Image
 import colorsys
 
@@ -139,10 +140,26 @@ def render_scss(palette: Palette) -> str:
 
 def compile_scss(scss_source: str) -> Optional[str]:
     """
-    Compile SCSS source to CSS using the 'sass' binary.
+    Compile SCSS source to CSS.
+    Tries libsass (python) first, then the 'sass' CLI.
     Returns CSS string on success; None on failure (never raises).
     """
     include_dir = str(Path(settings.BASE_DIR) / "vendor")
+
+    try:
+        import sass  # type: ignore
+    except Exception:
+        sass = None
+
+    if sass:
+        try:
+            return sass.compile(
+                string=scss_source,
+                include_paths=[include_dir],
+                output_style="compressed",
+            )
+        except Exception as e:
+            logger.error("libsass compilation failed; falling back to sass CLI: %s", e)
 
     src_path = None
     css_path = None
@@ -163,14 +180,12 @@ def compile_scss(scss_source: str) -> Optional[str]:
             css_path,
         ]
 
-        # capture_output lets us log real error messages
         subprocess.run(cmd, check=True, capture_output=True, text=True)
 
         return Path(css_path).read_text(encoding="utf-8")
 
     except FileNotFoundError:
-        # sass not installed
-        logger.warning("SASS binary not found. Skipping theme compilation.")
+        logger.warning("SASS binary not found. Theme CSS not generated.")
         return None
 
     except subprocess.CalledProcessError as e:
@@ -186,7 +201,6 @@ def compile_scss(scss_source: str) -> Optional[str]:
         return None
 
     finally:
-        # Clean temp files
         try:
             if src_path:
                 Path(src_path).unlink(missing_ok=True)
@@ -220,6 +234,35 @@ def _ensure_rgb(image_path: Path) -> Path:
         img.convert("RGB").save(tmp, format="PNG")
         return tmp
     return image_path
+
+
+def _resolve_logo_path(association) -> Tuple[Optional[Path], bool]:
+    """
+    Resolve a filesystem path for the logo, handling storages where .path is unavailable.
+    Returns None if the logo cannot be accessed locally.
+    """
+    logo = getattr(association, "logo_image", None)
+    if not logo:
+        return None, False
+
+    try:
+        if logo.path:
+            return Path(logo.path), False
+    except Exception:
+        pass
+
+    if not logo.name:
+        return None, False
+
+    try:
+        with default_storage.open(logo.name, "rb") as f, tempfile.NamedTemporaryFile(
+            suffix=Path(logo.name).suffix, delete=False
+        ) as tmp:
+            tmp.write(f.read())
+            return Path(tmp.name), True
+    except Exception as e:
+        logger.error("Failed to read logo from storage: %s", e)
+        return None, False
 
 
 def get_primary_secondary_colors(
@@ -297,9 +340,11 @@ def get_association_theme(association) -> Optional[str]:
 
     fallback = getattr(settings, "ASSOCIATION_DEFAULT_THEME", ("#3b82f6", "#64748b"))
 
+    logo_path, logo_is_temp = _resolve_logo_path(association)
+
     try:
         primary_color, secondary_color = get_primary_secondary_colors(
-            Path(association.logo_image.path),
+            logo_path,
             fallback_colors=fallback,
         )
     except Exception as e:
@@ -309,4 +354,12 @@ def get_association_theme(association) -> Optional[str]:
     palette = generate_complete_palette(primary_color, secondary_color)
 
     css = build_association_theme(palette)
+
+    # Clean temp logo file if created from storage
+    if logo_is_temp and logo_path:
+        try:
+            logo_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
     return css

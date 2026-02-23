@@ -303,7 +303,11 @@ class FacultyAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         return request.user.is_superuser or self.is_guild_admin(request)
 
     def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser or self.is_guild_admin(request)
+        if request.user.is_superuser or self.is_guild_admin(request):
+            return True
+        if self.is_association_admin(request):
+            return True
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser or self.is_guild_admin(request)
