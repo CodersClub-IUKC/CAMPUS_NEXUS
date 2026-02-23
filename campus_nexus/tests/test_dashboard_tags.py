@@ -3,8 +3,9 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.test.client import RequestFactory
+from django.utils import timezone
 
-from campus_nexus.models import Association, AssociationAdmin, Charge, Faculty, Member, Membership, Payment
+from campus_nexus.models import Association, AssociationAdmin, Charge, Expense, Faculty, Member, Membership, Payment
 from campus_nexus.templatetags.dashboard_tags import association_dashboard_data
 
 
@@ -76,6 +77,23 @@ class AssociationDashboardDataTests(TestCase):
             status="reversed",
         )
 
+        Expense.objects.create(
+            association=cls.association,
+            title="Stationery",
+            category="operations",
+            amount=Decimal("40.00"),
+            spent_at=timezone.now(),
+            status="recorded",
+        )
+        Expense.objects.create(
+            association=cls.association,
+            title="Cancelled Expense",
+            category="other",
+            amount=Decimal("15.00"),
+            spent_at=timezone.now(),
+            status="reversed",
+        )
+
     def test_association_dashboard_data_includes_finance_metrics(self):
         request = RequestFactory().get("/admin/")
         request.user = self.user
@@ -84,6 +102,10 @@ class AssociationDashboardDataTests(TestCase):
         finance = data["finance"]
         self.assertEqual(finance["total_billed"], Decimal("300.00"))
         self.assertEqual(finance["total_collected"], Decimal("50.00"))
+        self.assertEqual(finance["total_expenses"], Decimal("40.00"))
+        self.assertEqual(finance["net_position"], Decimal("10.00"))
+        self.assertEqual(finance["net_margin_percent"], Decimal("20.00"))
         self.assertEqual(finance["outstanding_balance"], Decimal("250.00"))
         self.assertEqual(finance["open_charges_count"], 2)
         self.assertEqual(finance["overdue_charges_count"], 1)
+        self.assertEqual(finance["this_month_expenses"], Decimal("40.00"))

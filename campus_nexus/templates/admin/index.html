@@ -324,37 +324,75 @@
             </div></div>
           </div>
 
+          <div class="col-lg-6 col-md-12 col-sm-12 mb-3">
+            <div class="card shadow-sm h-100">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <div style="opacity:.7;">Income vs Expenses</div>
+                  <small style="opacity:.65;">Recorded totals</small>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center" style="gap:14px;">
+                  <div style="width:180px; max-width:100%;">
+                    <canvas id="associationIncomeExpenseChart" height="150"></canvas>
+                  </div>
+                  <div style="min-width:220px;">
+                    <div style="font-weight:700;">Income: UGX {{ a.finance.total_collected|floatformat:0 }}</div>
+                    <div style="font-weight:700;">Expenses: UGX {{ a.finance.total_expenses|floatformat:0 }}</div>
+                    <div style="opacity:.75;">Net: UGX {{ a.finance.net_position|floatformat:0 }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
           <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
             <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Total Collected</div>
-              <div style="font-size:28px; font-weight:800;">UGX {{ a.finance.total_collected|floatformat:0 }}</div>
+              <div style="opacity:.7;">Net Position</div>
+              <div style="font-size:24px; font-weight:800;">UGX {{ a.finance.net_position|floatformat:0 }}</div>
+              <div style="font-size:13px; opacity:.75;">
+                {% if a.finance.net_position >= 0 %}
+                  Surplus ({{ a.finance.net_margin_percent }}%)
+                {% else %}
+                  Deficit ({{ a.finance.net_margin_percent }}%)
+                {% endif %}
+              </div>
             </div></div>
           </div>
 
           <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
             <div class="card shadow-sm h-100"><div class="card-body">
               <div style="opacity:.7;">Outstanding Balance</div>
-              <div style="font-size:28px; font-weight:800;">UGX {{ a.finance.outstanding_balance|floatformat:0 }}</div>
-            </div></div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-lg-4 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Total Billed</div>
-              <div style="font-size:24px; font-weight:800;">UGX {{ a.finance.total_billed|floatformat:0 }}</div>
+              <div style="font-size:24px; font-weight:800;">UGX {{ a.finance.outstanding_balance|floatformat:0 }}</div>
             </div></div>
           </div>
 
-          <div class="col-lg-4 col-md-6 col-sm-12 mb-3">
+          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
             <div class="card shadow-sm h-100"><div class="card-body">
               <div style="opacity:.7;">Collected This Month</div>
               <div style="font-size:24px; font-weight:800;">UGX {{ a.finance.this_month_collected|floatformat:0 }}</div>
             </div></div>
           </div>
 
-          <div class="col-lg-4 col-md-12 col-sm-12 mb-3">
+          <div class="col-lg-3 col-md-12 col-sm-12 mb-3">
+            <div class="card shadow-sm h-100"><div class="card-body">
+              <div style="opacity:.7;">Spent This Month</div>
+              <div style="font-size:24px; font-weight:800;">UGX {{ a.finance.this_month_expenses|floatformat:0 }}</div>
+            </div></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-lg-6 col-md-6 col-sm-12 mb-3">
+            <div class="card shadow-sm h-100"><div class="card-body">
+              <div style="opacity:.7;">Total Billed</div>
+              <div style="font-size:24px; font-weight:800;">UGX {{ a.finance.total_billed|floatformat:0 }}</div>
+            </div></div>
+          </div>
+
+          <div class="col-lg-6 col-md-12 col-sm-12 mb-3">
             <div class="card shadow-sm h-100"><div class="card-body">
               <div style="opacity:.7;">Open Charges</div>
               <div style="font-size:16px; font-weight:700;">
@@ -375,7 +413,9 @@
                 <a class="btn btn-success" href="{% url 'admin:campus_nexus_membership_add' %}">+ Add Membership</a>
                 <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_membership_changelist' %}">View Memberships</a>
                 <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_payment_add' %}">Record Payment</a>
+                <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_expense_add' %}">Record Expense</a>
                 <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_charge_changelist' %}">View Charges</a>
+                <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_expense_changelist' %}">View Expenses</a>
               </div>
             </div>
           </div>
@@ -404,6 +444,39 @@
 
       </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+      const assocIncome = parseFloat("{{ a.finance.total_collected|default_if_none:'0' }}") || 0;
+      const assocExpenses = parseFloat("{{ a.finance.total_expenses|default_if_none:'0' }}") || 0;
+      const assocChartEl = document.getElementById("associationIncomeExpenseChart");
+
+      if (assocChartEl) {
+        new Chart(assocChartEl, {
+          type: "doughnut",
+          data: {
+            labels: ["Income", "Expenses"],
+            datasets: [{
+              data: [assocIncome, assocExpenses],
+              backgroundColor: ["#198754", "#dc3545"],
+              borderWidth: 1,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: "bottom" },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.label}: UGX ${Number(ctx.raw || 0).toLocaleString()}`,
+                },
+              },
+            },
+          },
+        });
+      }
+    </script>
 
   {% else %}
     {{ block.super }}
