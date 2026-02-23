@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.test import RequestFactory
 
-from campus_nexus.models import Faculty, Association, Member, Membership
+from campus_nexus.models import Faculty, Association, Member, Membership, Cabinet, CabinetMember, GuildCabinet
 
 
 class AdminPrivacyIntegrationTests(TestCase):
@@ -218,6 +218,41 @@ class AdminPrivacyIntegrationTests(TestCase):
         ids = {item.get("id") for item in data.get("results", [])}
         self.assertIn(str(self.member_1.id), ids)
 
+    def test_assoc_admin_can_use_member_autocomplete_for_cabinet_member(self):
+        self.client.login(username="assocA", password="pass12345")
+
+        Cabinet.objects.create(association=self.assoc_a, year="2026/2027")
+
+        url = reverse("admin:autocomplete")
+        resp = self.client.get(
+            url,
+            {
+                "term": "ibrahim",
+                "app_label": "campus_nexus",
+                "model_name": "cabinetmember",
+                "field_name": "member",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        ids = {item.get("id") for item in data.get("results", [])}
+        self.assertIn(str(self.member_1.id), ids)
+        self.assertNotIn(str(self.member_2.id), ids)
+
+    def test_association_changelist_shows_cabinet_president_name(self):
+        cabinet = Cabinet.objects.create(association=self.assoc_a, year="2026/2027")
+        CabinetMember.objects.create(
+            cabinet=cabinet,
+            member=self.member_1,
+            role="president",
+        )
+
+        self.client.login(username="guild", password="pass12345")
+        url = reverse("admin:campus_nexus_association_changelist")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.member_1.full_name)
+
     def test_assoc_admin_on_own_association_sees_membership_fee_and_system_tabs(self):
         self.client.login(username="assocA", password="pass12345")
         url = reverse("admin:campus_nexus_association_change", args=[self.assoc_a.id])
@@ -275,3 +310,7 @@ class AdminPrivacyIntegrationTests(TestCase):
         model_names = {m["object_name"].lower() for m in campus_app["models"]}
 
         self.assertNotIn("expense", model_names)
+
+    def test_guild_cabinet_admin_columns_order(self):
+        guild_cabinet_admin = admin.site._registry[GuildCabinet]
+        self.assertEqual(guild_cabinet_admin.list_display, ("name", "year", "is_active"))
