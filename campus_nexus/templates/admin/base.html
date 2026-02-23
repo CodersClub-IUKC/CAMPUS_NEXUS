@@ -87,7 +87,7 @@
 
         // Create the form UI
         centerWrap.innerHTML = `
-  <form id="cnx-global-search-form" method="GET" action="/admin/campus_nexus/member/"
+  <form id="cnx-global-search-form" method="GET" action="/admin/campus_nexus/membership/"
         style="display:flex;align-items:center;gap:12px;width:min(820px, 75vw);">
 
     <select id="cnx-search-target" class="form-control"
@@ -98,8 +98,7 @@
               border-radius:12px;
               max-width:190px;
             ">
-      <option value="/admin/campus_nexus/member/" selected>Members</option>
-      <option value="/admin/campus_nexus/membership/">Memberships</option>
+      <option value="/admin/campus_nexus/membership/" selected>Memberships</option>
       <option value="/admin/campus_nexus/payment/">Payments</option>
       <option value="/admin/campus_nexus/event/">Events</option>
       <option value="/admin/campus_nexus/fee/">Fees</option>
@@ -149,6 +148,85 @@
     }
 
     addCenteredGlobalSearch();
+
+    {% if request.user.is_authenticated and request.user.association_admin %}
+    // Association admins must not see Members module links.
+    (function hideMembersLinksForAssociationAdmin() {
+      const memberPath = "/admin/campus_nexus/member/";
+
+      const removeMemberLinks = () => {
+        document
+          .querySelectorAll(`a[href='${memberPath}'], a[href^='${memberPath}?']`)
+          .forEach((el) => {
+            const li = el.closest("li");
+            if (li) {
+              li.remove();
+            } else {
+              el.remove();
+            }
+          });
+      };
+
+      removeMemberLinks();
+      setTimeout(removeMemberLinks, 250);
+      setTimeout(removeMemberLinks, 1000);
+    })();
+    {% endif %}
+
+    // Login lockout countdown (non-invasive: no layout changes)
+    (function () {
+        if (!window.location.pathname.startsWith("/admin/login/")) return;
+
+        const params = new URLSearchParams(window.location.search);
+        const lockUntil = parseInt(params.get("lockout_until") || "", 10);
+        if (!lockUntil) return;
+
+        const form = document.getElementById("login-form");
+        if (!form) return;
+
+        const username = params.get("username") || "";
+        const usernameInput = document.getElementById("id_username");
+        if (usernameInput && username && !usernameInput.value) {
+            usernameInput.value = username;
+        }
+
+        let note = document.getElementById("lockout-note");
+        if (!note) {
+            note = document.createElement("p");
+            note.id = "lockout-note";
+            note.className = "errornote";
+            form.parentNode.insertBefore(note, form);
+        }
+
+        const submitBtn = form.querySelector("input[type='submit']");
+        const passwordInput = document.getElementById("id_password");
+        let timerId = null;
+
+        function tick() {
+            const now = Math.floor(Date.now() / 1000);
+            const remaining = Math.max(0, lockUntil - now);
+
+            note.textContent = remaining > 0
+                ? "Too many failed login attempts. Try again in " + remaining + " seconds."
+                : "You can try logging in again now.";
+
+            const locked = remaining > 0;
+            if (submitBtn) submitBtn.disabled = locked;
+            if (passwordInput) passwordInput.disabled = locked;
+
+            if (!locked) {
+                params.delete("locked");
+                params.delete("lockout_until");
+                const nextQuery = params.toString();
+                const target = nextQuery ? (window.location.pathname + "?" + nextQuery) : window.location.pathname;
+                window.history.replaceState({}, "", target);
+                if (timerId) clearInterval(timerId);
+            }
+        }
+
+        tick();
+        timerId = setInterval(tick, 1000);
+    })();
     
     {% if request.user.is_authenticated and request.user.dean %}
 <script>
