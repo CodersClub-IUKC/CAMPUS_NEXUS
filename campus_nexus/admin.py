@@ -378,8 +378,16 @@ class AssociationModelAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         return obj.id == assoc_admin.association_id
     
     def president_name(self, obj):
-        admin_obj = getattr(obj, "associationadmin", None) or getattr(obj, "association_admin", None)
-        if admin_obj:
+        # Prefer the latest cabinet member whose role is president.
+        for cabinet in sorted(obj.cabinets.all(), key=lambda c: c.id, reverse=True):
+            for cabinet_member in cabinet.cabinet_members.all():
+                role_value = (cabinet_member.role or "").strip().lower()
+                if "president" in role_value and "vice" not in role_value:
+                    return cabinet_member.member.full_name
+
+        # Fallback to assigned AssociationAdmin user.
+        admin_obj = obj.admins.select_related("user").order_by("id").first()
+        if admin_obj and admin_obj.user:
             return admin_obj.user.get_full_name() or admin_obj.user.username
         return "—"
     president_name.short_description = "President"
@@ -438,7 +446,10 @@ class AssociationModelAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
     total_fees_collected.short_description = "Total Fees Collected"
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
+        qs = super().get_queryset(request).prefetch_related(
+            "admins__user",
+            "cabinets__cabinet_members__member",
+        )
 
         # Everyone with access can view all associations (including association admins)
         if (
@@ -564,7 +575,11 @@ class MemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
                 app_label = request.GET.get("app_label")
                 model_name = request.GET.get("model_name")
                 field_name = request.GET.get("field_name")
-                if app_label == "campus_nexus" and model_name == "membership" and field_name == "member":
+                if (
+                    app_label == "campus_nexus"
+                    and field_name == "member"
+                    and model_name in {"membership", "cabinetmember"}
+                ):
                     return True
         except Exception:
             pass
@@ -2003,10 +2018,11 @@ admin.site.get_urls = _custom_get_urls
 @admin.register(GuildCabinet)
 class GuildCabinetAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
     inlines = [GuildExecutiveInline]
-    list_display = ("year", "is_active", "created_at")
+    list_display = ("name", "year", "is_active")
     list_filter = ("is_active",)
-    search_fields = ("year",)
+    search_fields = ("name", "year")
     ordering = ("-year",)
+    fields = ("name", "year", "is_active")
 
     def has_module_permission(self, request):
         return request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request) or self.is_association_admin(request)
