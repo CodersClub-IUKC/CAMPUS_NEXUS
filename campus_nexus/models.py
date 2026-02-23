@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.core.files.base import ContentFile
 from django.conf import settings
+from django.core.files.storage import default_storage
 try:
     from .theme_utils import get_association_theme
 except Exception:
@@ -126,10 +127,18 @@ class Association(models.Model):
             if isinstance(css_content, str) and css_content.strip():
                 file_name = f"association_{self.id}.css"
 
-                # Assign file directly instead of calling .save()
-                self.theme_css_file = ContentFile(
-                    css_content.encode("utf-8"),
-                    name=file_name
+                # Remove prior theme file to avoid orphaned versions
+                if self.theme_css_file and self.theme_css_file.name:
+                    try:
+                        default_storage.delete(self.theme_css_file.name)
+                    except Exception:
+                        pass
+
+                # Save file via storage without triggering model save
+                self.theme_css_file.save(
+                    file_name,
+                    ContentFile(css_content.encode("utf-8")),
+                    save=False,
                 )
 
                 # Update DB directly without recursion
