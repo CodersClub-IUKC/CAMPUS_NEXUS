@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.core.files.base import ContentFile
 from django.conf import settings
+from django.core.files.storage import default_storage
 try:
     from .theme_utils import get_association_theme
 except Exception:
@@ -126,10 +127,18 @@ class Association(models.Model):
             if isinstance(css_content, str) and css_content.strip():
                 file_name = f"association_{self.id}.css"
 
-                # Assign file directly instead of calling .save()
-                self.theme_css_file = ContentFile(
-                    css_content.encode("utf-8"),
-                    name=file_name
+                # Remove prior theme file to avoid orphaned versions
+                if self.theme_css_file and self.theme_css_file.name:
+                    try:
+                        default_storage.delete(self.theme_css_file.name)
+                    except Exception:
+                        pass
+
+                # Save file via storage without triggering model save
+                self.theme_css_file.save(
+                    file_name,
+                    ContentFile(css_content.encode("utf-8")),
+                    save=False,
                 )
 
                 # Update DB directly without recursion
@@ -461,6 +470,41 @@ class PaymentReminderLog(models.Model):
 
     def __str__(self):
         return f"{self.membership} | {self.charge} | {self.reminder_type} @ {self.scheduled_for}"
+
+
+class AuditLog(models.Model):
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
+    association = models.ForeignKey(
+        "Association",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
+    action = models.CharField(max_length=64)
+    model_name = models.CharField(max_length=120)
+    object_id = models.CharField(max_length=64, blank=True, default="")
+    object_repr = models.CharField(max_length=255, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["action"]),
+            models.Index(fields=["model_name"]),
+            models.Index(fields=["association", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.created_at} | {self.action} | {self.model_name}#{self.object_id}"
 
 
 class Event(models.Model):
