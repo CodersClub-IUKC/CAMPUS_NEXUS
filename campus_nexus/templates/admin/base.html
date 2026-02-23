@@ -99,7 +99,10 @@
               max-width:190px;
             ">
       <option value="/admin/campus_nexus/membership/" selected>Memberships</option>
+      {% if request.user.is_superuser or request.user.association_admin %}
       <option value="/admin/campus_nexus/payment/">Payments</option>
+      <option value="/admin/campus_nexus/expense/">Expenses</option>
+      {% endif %}
       <option value="/admin/campus_nexus/event/">Events</option>
       <option value="/admin/campus_nexus/fee/">Fees</option>
       <option value="/admin/campus_nexus/cabinet/">Cabinets</option>

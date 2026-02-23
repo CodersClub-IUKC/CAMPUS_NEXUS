@@ -146,6 +146,24 @@ class AdminPrivacyIntegrationTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
 
+    def test_assoc_admin_can_open_expense_changelist(self):
+        self.client.login(username="assocA", password="pass12345")
+        url = reverse("admin:campus_nexus_expense_changelist")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_guild_admin_cannot_open_expense_changelist(self):
+        self.client.login(username="guild", password="pass12345")
+        url = reverse("admin:campus_nexus_expense_changelist")
+        resp = self.client.get(url)
+        self.assertIn(resp.status_code, (302, 403))
+
+    def test_dean_cannot_open_expense_changelist(self):
+        self.client.login(username="dean", password="pass12345")
+        url = reverse("admin:campus_nexus_expense_changelist")
+        resp = self.client.get(url)
+        self.assertIn(resp.status_code, (302, 403))
+
     def test_assoc_admin_can_use_member_autocomplete_for_membership(self):
         """
         Assoc admin must NOT see members list,
@@ -234,6 +252,7 @@ class AdminPrivacyIntegrationTests(TestCase):
         self.assertIn("cabinet", model_names)
         self.assertIn("cabinetmember", model_names)
         self.assertIn("fee", model_names)
+        self.assertIn("expense", model_names)
         self.assertIn("guildcabinet", model_names)
 
     def test_guild_admin_admin_app_list_hides_audit_log(self):
@@ -245,3 +264,14 @@ class AdminPrivacyIntegrationTests(TestCase):
         model_names = {m["object_name"].lower() for m in campus_app["models"]}
 
         self.assertNotIn("auditlog", model_names)
+        self.assertNotIn("expense", model_names)
+
+    def test_dean_admin_app_list_hides_expense(self):
+        request = RequestFactory().get("/admin/")
+        request.user = self.dean
+
+        app_list = admin.site.get_app_list(request)
+        campus_app = next(a for a in app_list if a["app_label"] == "campus_nexus")
+        model_names = {m["object_name"].lower() for m in campus_app["models"]}
+
+        self.assertNotIn("expense", model_names)

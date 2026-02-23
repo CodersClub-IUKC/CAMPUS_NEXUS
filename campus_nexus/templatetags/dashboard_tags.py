@@ -10,6 +10,7 @@ from campus_nexus.models import (
     Announcement,
     Association,
     Charge,
+    Expense,
     Event,
     Member,
     Membership,
@@ -166,6 +167,12 @@ def association_dashboard_data(context):
         .get("total")
         or Decimal("0.00")
     )
+    total_expenses = (
+        Expense.objects.filter(association=assoc, status="recorded")
+        .aggregate(total=Sum("amount"))
+        .get("total")
+        or Decimal("0.00")
+    )
 
     outstanding_balance = Decimal("0.00")
     open_charges_qs = charges_qs.filter(status__in=["unpaid", "partial"]).annotate(
@@ -192,6 +199,23 @@ def association_dashboard_data(context):
         .get("total")
         or Decimal("0.00")
     )
+    this_month_expenses = (
+        Expense.objects.filter(
+            association=assoc,
+            status="recorded",
+            spent_at__year=today.year,
+            spent_at__month=today.month,
+        )
+        .aggregate(total=Sum("amount"))
+        .get("total")
+        or Decimal("0.00")
+    )
+
+    net_position = total_collected - total_expenses
+    if total_collected > 0:
+        net_margin_percent = round((net_position / total_collected) * Decimal("100.00"), 2)
+    else:
+        net_margin_percent = Decimal("0.00")
 
     # Assoc admin sees:
     # - published global
@@ -214,10 +238,14 @@ def association_dashboard_data(context):
         "finance": {
             "total_billed": total_billed,
             "total_collected": total_collected,
+            "total_expenses": total_expenses,
+            "net_position": net_position,
+            "net_margin_percent": net_margin_percent,
             "outstanding_balance": outstanding_balance,
             "overdue_charges_count": overdue_charges_count,
             "open_charges_count": open_charges_count,
             "this_month_collected": this_month_collected,
+            "this_month_expenses": this_month_expenses,
         },
         "announcements": {"latest": latest_announcements},
     }

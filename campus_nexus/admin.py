@@ -1622,6 +1622,171 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
                 metadata={"previous_status": str(old_status or "")},
             )
 
+
+@admin.register(Expense)
+class ExpenseAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = (
+        "title",
+        "association",
+        "category",
+        "amount",
+        "spent_at",
+        "payment_method",
+        "status",
+    )
+    ordering = ("-spent_at", "-recorded_at")
+    search_fields = (
+        "title",
+        "payee",
+        "reference_code",
+        "description",
+        "note",
+        "association__name",
+    )
+    list_select_related = ("association", "recorded_by", "approved_by")
+    readonly_fields = ("recorded_at", "recorded_by")
+
+    def get_list_filter(self, request):
+        if request.user.is_superuser:
+            return ("status", "category", "payment_method", "association", "spent_at")
+        return ("status", "category", "payment_method", "spent_at")
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser or bool(self.is_association_admin(request))
+
+    def has_view_permission(self, request, obj=None):
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return False
+
+        if request.user.is_superuser:
+            return True
+
+        assoc_admin = self.get_association_admin(request)
+        if not assoc_admin:
+            return False
+
+        if obj is not None:
+            return obj.association_id == assoc_admin.association_id
+        return True
+
+    def has_add_permission(self, request):
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return False
+        return request.user.is_superuser or bool(self.is_association_admin(request))
+
+    def has_change_permission(self, request, obj=None):
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return False
+
+        if request.user.is_superuser:
+            return True
+
+        assoc_admin = self.get_association_admin(request)
+        if not assoc_admin:
+            return False
+
+        if obj is not None:
+            return obj.association_id == assoc_admin.association_id
+        return True
+
+    def has_delete_permission(self, request, obj=None):
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return False
+
+        if request.user.is_superuser:
+            return True
+
+        assoc_admin = self.get_association_admin(request)
+        if not assoc_admin:
+            return False
+
+        if obj is not None:
+            return obj.association_id == assoc_admin.association_id
+        return True
+
+    def get_fields(self, request, obj=None):
+        fields = [
+            "association",
+            "title",
+            "category",
+            "amount",
+            "spent_at",
+            "payee",
+            "payment_method",
+            "reference_code",
+            "receipt_image",
+            "description",
+            "note",
+            "status",
+            "approved_by",
+            "recorded_at",
+            "recorded_by",
+        ]
+
+        if self.is_association_admin(request) and not request.user.is_superuser:
+            fields.remove("association")
+            fields.remove("approved_by")
+
+        return fields
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if self.is_association_admin(request) and not request.user.is_superuser:
+            assoc = request.user.association_admin.association
+            if db_field.name == "association":
+                kwargs["queryset"] = Association.objects.filter(id=assoc.id)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related("association", "recorded_by", "approved_by")
+
+        if request.user.is_superuser:
+            return qs
+
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return qs.none()
+
+        if assoc_admin := self.get_association_admin(request):
+            return qs.filter(association=assoc_admin.association)
+
+        return qs.none()
+
+    def save_model(self, request, obj, form, change):
+        if not request.user.is_superuser:
+            assoc_admin = self.get_association_admin(request)
+            if not assoc_admin:
+                raise PermissionDenied("You are not allowed to record expenses.")
+            obj.association = assoc_admin.association
+        elif not obj.association_id:
+            raise ValidationError("Association is required.")
+
+        if not obj.recorded_by_id:
+            obj.recorded_by = request.user
+
+        super().save_model(request, obj, form, change)
+        record_audit_event(
+            actor=request.user,
+            action="expense_updated" if change else "expense_recorded",
+            obj=obj,
+            metadata={
+                "amount": str(obj.amount),
+                "category": str(obj.category),
+                "status": str(obj.status),
+            },
+        )
+
+    def delete_model(self, request, obj):
+        record_audit_event(
+            actor=request.user,
+            action="expense_deleted",
+            obj=obj,
+            metadata={
+                "amount": str(obj.amount),
+                "category": str(obj.category),
+            },
+        )
+        super().delete_model(request, obj)
+
+
 @admin.register(Event)
 class EventAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
     list_display = ("title", "association", "event_date", "created_at", "venue", "posted_by")

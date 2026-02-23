@@ -438,6 +438,74 @@ class Payment(models.Model):
     def __str__(self):
         return f"{self.membership.member.full_name} - {self.amount_paid}"
 
+
+class Expense(models.Model):
+    CATEGORY_CHOICES = [
+        ("operations", "Operations"),
+        ("event", "Event"),
+        ("logistics", "Logistics"),
+        ("welfare", "Welfare"),
+        ("marketing", "Marketing"),
+        ("other", "Other"),
+    ]
+
+    METHOD_CHOICES = [
+        ("cash", "Cash"),
+        ("momo", "Mobile Money"),
+        ("bank", "Bank"),
+        ("other", "Other"),
+    ]
+
+    STATUS_CHOICES = [
+        ("recorded", "Recorded"),
+        ("reversed", "Reversed"),
+    ]
+
+    association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name="expenses")
+    title = models.CharField(max_length=200)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="other")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    spent_at = models.DateTimeField(default=timezone.now)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+    recorded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recorded_expenses",
+    )
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_expenses",
+    )
+    payment_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default="cash")
+    payee = models.CharField(max_length=150, blank=True, default="")
+    reference_code = models.CharField(max_length=120, blank=True, default="")
+    receipt_image = models.ImageField(upload_to="expenses/receipts/", null=True, blank=True)
+    description = models.TextField(blank=True, default="")
+    note = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="recorded")
+
+    class Meta:
+        ordering = ("-spent_at", "-recorded_at")
+        indexes = [
+            models.Index(fields=["association", "spent_at"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["category"]),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.amount is not None and self.amount <= 0:
+            raise ValidationError({"amount": "Amount must be greater than 0."})
+
+    def __str__(self):
+        return f"{self.association.name} - {self.title} ({self.amount})"
+
+
 class PaymentReminderLog(models.Model):
     REMINDER_TYPES = [
         ("before_due", "Before Due"),
