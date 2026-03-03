@@ -1,12 +1,13 @@
 from django.db import models
 from django.utils import timezone
 from django.core.validators import RegexValidator
-from django.core.exceptions import ValidationError
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.core.files.base import ContentFile
 from django.conf import settings
 from django.core.files.storage import default_storage
+from .countries import COUNTRY_CHOICES
 try:
     from .theme_utils import get_association_theme
 except Exception:
@@ -150,7 +151,6 @@ class Association(models.Model):
     def __str__(self):
         return self.name
 
-
 class Member(models.Model):
     MEMBER_TYPES = [
         ('student', 'Student'),
@@ -160,6 +160,7 @@ class Member(models.Model):
 
     first_name = models.CharField(max_length=50, default='')
     last_name = models.CharField(max_length=50, default='')
+    photo = models.ImageField(upload_to="members/photos/", blank=True, null=True)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=15, validators=[RegexValidator(r'^\+?\d{9,15}$')])
 
@@ -167,7 +168,7 @@ class Member(models.Model):
     national_id_number = models.CharField(max_length=20, unique=True, null=True, blank=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_members')
     created_in_association = models.ForeignKey(Association, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_members')
-    nationality = models.CharField(max_length=50, blank=True)
+    nationality = models.CharField(max_length=100, choices=COUNTRY_CHOICES, blank=True)
     member_type = models.CharField(max_length=10, choices=MEMBER_TYPES)
     faculty = models.ForeignKey(Faculty, on_delete=models.SET_NULL, null=True, blank=True)
     course = models.ForeignKey(Course, on_delete=models.SET_NULL, null=True, blank=True)
@@ -185,11 +186,6 @@ class Member(models.Model):
 
     def __str__(self):
         return f"{self.full_name} ({self.registration_number})"
-
-
-from django.db import models
-from django.utils import timezone
-from django.core.exceptions import ValidationError
 
 class Membership(models.Model):
     STATUS_CHOICES = [
@@ -212,7 +208,14 @@ class Membership(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["member", "association"], name="unique_member_per_association")
+            models.UniqueConstraint(
+                fields=["member", "association"],
+                name="unique_member_per_association",
+                violation_error_message=(
+                    "This member is already registered in this association. "
+                    "Use the existing membership record instead of creating a duplicate."
+                ),
+            )
         ]
 
     def clean(self):
@@ -220,6 +223,9 @@ class Membership(models.Model):
 
         if not self.association_id:
             raise ValidationError({"association": "Association is required."})
+        if not self.member_id:
+            # Let field-level validation handle required member errors.
+            return
 
         # Auto default anchor date on create (keeps your logic consistent)
         if not self.pk and not self.subscription_anchor_date:
@@ -230,20 +236,22 @@ class Membership(models.Model):
             return
 
         existing = (
-            Membership.objects.filter(member=self.member, association__faculty__isnull=False)
+            Membership.objects.filter(member_id=self.member_id, association__faculty__isnull=False)
             .exclude(pk=self.pk)
             .select_related("association__faculty")
         )
 
         for m in existing:
             if m.association.faculty_id != assoc.faculty_id:
-                raise ValidationError({
-                    "association": (
-                        "This student is already in a faculty-based association "
-                        f"({m.association.name} - {m.association.faculty.name}). "
-                        "They cannot join another faculty-based association under a different faculty."
-                    )
-                })
+                raise ValidationError(
+                    {
+                        NON_FIELD_ERRORS: (
+                            "Member you are trying to add belongs to a faculty-based association "
+                            f"({m.association.name} - {m.association.faculty.name}). "
+                            "You cannot add this member to another faculty-based association."
+                        )
+                    }
+                )
 
     def save(self, *args, **kwargs):
         if not self.subscription_anchor_date:

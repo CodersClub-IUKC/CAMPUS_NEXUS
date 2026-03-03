@@ -163,6 +163,7 @@ class CabinetInline(AssociationInlineGuardMixin, admin.TabularInline):
 class GuildExecutiveInline(admin.TabularInline):
     model = GuildExecutive
     extra = 0
+    show_change_link = True
     autocomplete_fields = ("member", "reports_to")
     fields = ("group_label", "position_type", "ministry", "member", "reports_to", "photo", "photo_preview")
     readonly_fields = ("group_label", "photo_preview")
@@ -183,6 +184,11 @@ class GuildExecutiveInline(admin.TabularInline):
             return format_html(
                 '<img src="{}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;" />',
                 obj.photo.url
+            )
+        if obj and obj.member and obj.member.photo:
+            return format_html(
+                '<img src="{}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;" />',
+                obj.member.photo.url
             )
         return "—"
     photo_preview.short_description = ""
@@ -555,10 +561,16 @@ class AssociationModelAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 @admin.register(Member)
 class MemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
     search_fields = ("registration_number", "email", "phone", "first_name", "last_name", "national_id_number")
-    list_display = ("first_name", "last_name", "registration_number", "email", "phone", "member_type")
-    readonly_fields = ("created_at", "created_by", "created_in_association")
+    list_display = ("photo_thumb", "first_name", "last_name", "registration_number", "email", "phone", "member_type")
+    readonly_fields = ("photo_preview", "created_at", "created_by", "created_in_association")
     ordering = ("first_name", "last_name")
     list_filter = ("member_type", "faculty", "course")
+    fieldsets = (
+        ("Profile Photo", {"fields": ("photo_preview", "photo")}),
+        ("Personal Details", {"fields": ("first_name", "last_name", "email", "phone", "nationality", "member_type")}),
+        ("Academic Details", {"fields": ("registration_number", "national_id_number", "faculty", "course")}),
+        ("Audit", {"fields": ("created_at", "created_by", "created_in_association")}),
+    )
 
     def has_module_permission(self, request):
         if request.user.is_superuser:
@@ -594,6 +606,30 @@ class MemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser or self.is_guild_admin(request)
+
+    def get_readonly_fields(self, request, obj=None):
+        base_readonly = ["photo_preview", "created_at", "created_by", "created_in_association"]
+        if request.user.is_superuser or self.is_guild_admin(request):
+            return base_readonly
+        return [f.name for f in self.model._meta.fields] + base_readonly
+
+    def photo_thumb(self, obj):
+        if obj and obj.photo:
+            return format_html(
+                '<img src="{}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" />',
+                obj.photo.url,
+            )
+        return "—"
+    photo_thumb.short_description = ""
+
+    def photo_preview(self, obj):
+        if obj and obj.photo:
+            return format_html(
+                '<img src="{}" style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:2px solid #d5dce5;" />',
+                obj.photo.url,
+            )
+        return "No photo uploaded."
+    photo_preview.short_description = "Current photo"
 
     # Filter autocomplete ONLY for CabinetMember.member
     def get_search_results(self, request, queryset, search_term):
@@ -663,14 +699,56 @@ class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             association = cleaned.get("association") or getattr(self.instance, "association", None)
             member = cleaned.get("member")
 
+            if member and association:
+                existing_in_association = Membership.objects.filter(
+                    member=member,
+                    association=association,
+                )
+                if self.instance.pk:
+                    existing_in_association = existing_in_association.exclude(pk=self.instance.pk)
+                if existing_in_association.exists():
+                    raise ValidationError(
+                        {
+                            "member": (
+                                "This member is already registered in this association. "
+                                "Use the existing membership record instead of creating another one."
+                            )
+                        }
+                    )
+
             if member and association and getattr(association, "faculty_id", None):
                 if member.faculty_id != association.faculty_id:
                     raise ValidationError({
                         "member": (
-                            f"{member.full_name} belongs to {member.faculty}, "
-                            f"but this association is restricted to {association.faculty}."
+                            "Member you are trying to add belongs to another faculty-based group. "
+                            f"{member.full_name} is in {member.faculty}, while this association is in {association.faculty}."
                         )
                     })
+
+                conflicting_faculty_membership = (
+                    Membership.objects.filter(
+                        member=member,
+                        association__faculty__isnull=False,
+                    )
+                    .exclude(association=association)
+                    .exclude(pk=self.instance.pk)
+                    .select_related("association__faculty")
+                    .first()
+                )
+                if (
+                    conflicting_faculty_membership
+                    and conflicting_faculty_membership.association.faculty_id != association.faculty_id
+                ):
+                    raise ValidationError(
+                        {
+                            "member": (
+                                "Member you are trying to add belongs to a faculty-based association "
+                                f"({conflicting_faculty_membership.association.name} - "
+                                f"{conflicting_faculty_membership.association.faculty.name}). "
+                                "You cannot add this member to another faculty-based association."
+                            )
+                        }
+                    )
 
             return cleaned
 
@@ -2043,18 +2121,57 @@ class GuildCabinetAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         return super().get_inline_instances(request, obj)
     
 @admin.register(GuildExecutive)
-class GuildExecutiveAdmin(admin.ModelAdmin):
+class GuildExecutiveAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    change_form_template = "admin/campus_nexus/guildexecutive/change_form.html"
     list_display = ("cabinet", "photo_thumb", "position_type", "ministry", "member", "reports_to")
     list_filter = ("cabinet", "position_type")
     search_fields = ("ministry", "member__first_name", "member__last_name", "member__registration_number")
     autocomplete_fields = ("member", "cabinet", "reports_to")
     ordering = ("-cabinet__year", "sort_order", "ministry", "member__first_name")
+    fields = ("cabinet", "position_type", "ministry", "member", "reports_to", "photo", "photo_thumb")
+    readonly_fields = ("photo_thumb",)
+
+    def _can_edit(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request)
+
+    def has_module_permission(self, request):
+        return (
+            request.user.is_superuser
+            or self.is_guild_admin(request)
+            or self.is_dean(request)
+            or self.is_association_admin(request)
+        )
+
+    def has_view_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    def has_add_permission(self, request):
+        return self._can_edit(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._can_edit(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_readonly_fields(self, request, obj=None):
+        if self._can_edit(request):
+            return ["photo_thumb"]
+        return [f.name for f in self.model._meta.fields] + ["photo_thumb"]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("member", "cabinet", "reports_to__member")
 
     def photo_thumb(self, obj):
         if obj.photo:
             return format_html(
                 '<img src="{}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;" />',
                 obj.photo.url
+            )
+        if obj.member and obj.member.photo:
+            return format_html(
+                '<img src="{}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;" />',
+                obj.member.photo.url
             )
         return "—"
     photo_thumb.short_description = "Photo"
