@@ -56,7 +56,7 @@ class AdminLoginRateLimitMiddleware:
             return self.get_response(request)
 
         max_attempts = int(getattr(settings, "ADMIN_LOGIN_MAX_ATTEMPTS", 5))
-        lockout_seconds = int(getattr(settings, "ADMIN_LOGIN_LOCKOUT_SECONDS", 30))
+        lockout_seconds = int(getattr(settings, "ADMIN_LOGIN_LOCKOUT_SECONDS", 60))
         if max_attempts <= 0:
             return self.get_response(request)
 
@@ -68,9 +68,11 @@ class AdminLoginRateLimitMiddleware:
 
         def _lock_redirect(locked_until):
             login_path = reverse("admin:login")
+            remaining = max(0, int(locked_until) - now)
             params = {
                 "locked": "1",
                 "lockout_until": str(int(locked_until)),
+                "lockout_remaining": str(remaining),
                 "username": username,
             }
             next_target = request.POST.get("next") or request.GET.get("next")

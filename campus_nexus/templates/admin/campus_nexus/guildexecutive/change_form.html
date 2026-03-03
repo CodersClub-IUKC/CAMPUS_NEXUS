@@ -1,0 +1,70 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block after_field_sets %}
+{{ block.super }}
+
+{% if original %}
+<div id="executive-profile-card" class="card mt-3" style="max-width: 720px; margin: 18px auto 0;">
+    <div class="card-header">
+        <strong>Executive Profile</strong>
+    </div>
+    <div class="card-body">
+        <div style="text-align:center; margin-bottom: 18px;">
+            {% if original.photo %}
+                <img
+                    src="{{ original.photo.url }}"
+                    alt="{{ original.member.full_name }}"
+                    style="width: 170px; height: 170px; object-fit: cover; border-radius: 50%; border: 3px solid #d5dce5;"
+                />
+            {% elif original.member.photo %}
+                <img
+                    src="{{ original.member.photo.url }}"
+                    alt="{{ original.member.full_name }}"
+                    style="width: 170px; height: 170px; object-fit: cover; border-radius: 50%; border: 3px solid #d5dce5;"
+                />
+            {% else %}
+                <div style="width:170px;height:170px;margin:0 auto;border-radius:50%;border:3px solid #d5dce5;display:flex;align-items:center;justify-content:center;font-weight:700;color:#708090;">
+                    NO PHOTO
+                </div>
+            {% endif %}
+        </div>
+
+        <table class="table table-sm table-bordered mb-0">
+            <tr>
+                <th style="width: 220px;">Name</th>
+                <td>{{ original.member.full_name }}</td>
+            </tr>
+            <tr>
+                <th>Position</th>
+                <td>{{ original.get_position_type_display }}</td>
+            </tr>
+            <tr>
+                <th>Ministry</th>
+                <td>{{ original.ministry|default:"—" }}</td>
+            </tr>
+            <tr>
+                <th>Cabinet</th>
+                <td>{{ original.cabinet }}</td>
+            </tr>
+            <tr>
+                <th>Registration Number</th>
+                <td>{{ original.member.registration_number|default:"—" }}</td>
+            </tr>
+            <tr>
+                <th>Email</th>
+                <td>{{ original.member.email|default:"—" }}</td>
+            </tr>
+            <tr>
+                <th>Phone</th>
+                <td>{{ original.member.phone|default:"—" }}</td>
+            </tr>
+            <tr>
+                <th>Nationality</th>
+                <td>{{ original.member.nationality|default:"—" }}</td>
+            </tr>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
