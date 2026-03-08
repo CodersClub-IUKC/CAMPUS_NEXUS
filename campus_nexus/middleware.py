@@ -1,4 +1,3 @@
- source /home/jamie-foxx/Desktop/CAMPUS_NEXUS/.nexusenv/bin/activate
 import hashlib
 import time
 from urllib.parse import urlencode
