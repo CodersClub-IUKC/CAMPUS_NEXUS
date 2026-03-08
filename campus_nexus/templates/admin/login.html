@@ -1,8 +1,19 @@
 {% extends "registration/base.html" %}
 
-{% load i18n jazzmin %}
+{% load i18n jazzmin static %}
 {% get_jazzmin_settings request as jazzmin_settings %}
 {% get_jazzmin_ui_tweaks as jazzmin_ui %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+      body.login-page {
+        background:
+          linear-gradient(rgba(234, 237, 254, 0.78), rgba(208, 231, 255, 0.78)),
+          url("{% static 'img/home.jpg' %}") center center / cover no-repeat fixed !important;
+      }
+    </style>
+{% endblock %}
 
 {% block content %}
     <p class="login-box-msg">{{ jazzmin_settings.welcome_sign }}</p>
