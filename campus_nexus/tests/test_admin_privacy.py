@@ -146,6 +146,54 @@ class AdminPrivacyIntegrationTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
 
+    def test_assoc_admin_gets_clear_message_for_duplicate_membership(self):
+        self.client.login(username="assocA", password="pass12345")
+        url = reverse("admin:campus_nexus_membership_add")
+        resp = self.client.post(
+            url,
+            {
+                "member": self.member_1.id,
+                "subscription_anchor_date": "",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "already registered in this association")
+
+    def test_assoc_admin_gets_clear_message_for_cross_faculty_member(self):
+        other_faculty = Faculty.objects.create(name="Faculty of Business")
+        other_assoc = Association.objects.create(
+            name="Association C",
+            faculty=other_faculty,
+            description="C",
+        )
+        other_member = Member.objects.create(
+            first_name="Aisha",
+            last_name="K.",
+            email="aisha@example.com",
+            phone="0700000100",
+            registration_number="223-063012-099",
+            national_id_number="CM99999999ZZ",
+            member_type="student",
+            faculty=other_faculty,
+        )
+        Membership.objects.create(
+            association=other_assoc,
+            member=other_member,
+            status="active",
+        )
+
+        self.client.login(username="assocA", password="pass12345")
+        url = reverse("admin:campus_nexus_membership_add")
+        resp = self.client.post(
+            url,
+            {
+                "member": other_member.id,
+                "subscription_anchor_date": "",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "belongs to another faculty-based group")
+
     def test_assoc_admin_can_open_expense_changelist(self):
         self.client.login(username="assocA", password="pass12345")
         url = reverse("admin:campus_nexus_expense_changelist")

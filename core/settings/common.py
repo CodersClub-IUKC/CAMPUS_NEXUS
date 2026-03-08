@@ -35,7 +35,31 @@ MIDDLEWARE = [
 
 ENABLE_ADMIN_LOGIN_RATE_LIMIT = os.getenv("ENABLE_ADMIN_LOGIN_RATE_LIMIT", "true").lower() == "true"
 ADMIN_LOGIN_MAX_ATTEMPTS = int(os.getenv("ADMIN_LOGIN_MAX_ATTEMPTS", "5"))
-ADMIN_LOGIN_LOCKOUT_SECONDS = int(os.getenv("ADMIN_LOGIN_LOCKOUT_SECONDS", "30"))
+ADMIN_LOGIN_LOCKOUT_SECONDS = int(os.getenv("ADMIN_LOGIN_LOCKOUT_SECONDS", "60"))
+
+# Keep sessions short-lived by default so stale browser tabs do not remain authenticated.
+SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", "1800"))  # 30 minutes
+SESSION_EXPIRE_AT_BROWSER_CLOSE = os.getenv("SESSION_EXPIRE_AT_BROWSER_CLOSE", "true").lower() == "true"
+SESSION_SAVE_EVERY_REQUEST = os.getenv("SESSION_SAVE_EVERY_REQUEST", "true").lower() == "true"
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
+CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax")
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
+CSRF_COOKIE_SECURE = os.getenv("CSRF_COOKIE_SECURE", "false").lower() == "true"
+
+# Explicit cache config so login lockout counters can be shared across workers when needed.
+CACHES = {
+    "default": {
+        "BACKEND": os.getenv(
+            "DJANGO_CACHE_BACKEND",
+            "django.core.cache.backends.filebased.FileBasedCache",
+        ),
+        "LOCATION": os.getenv(
+            "DJANGO_CACHE_LOCATION",
+            "/tmp/campus_nexus_django_cache",
+        ),
+    }
+}
 
 ROOT_URLCONF = "core.urls"
 
