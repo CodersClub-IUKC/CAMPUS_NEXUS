@@ -1,24 +1,45 @@
-#!/bin/bash
-cd ~/your_project_directory
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "🚀 Starting deployment..."
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$PROJECT_DIR"
 
-echo "1️⃣ Pulling latest code from GitHub..."
-git pull origin main
+echo "Starting deployment..."
 
-echo "2️⃣ Activating virtual environment..."
-source .nexusenv/bin/activate
+echo "1) Pulling latest code from Git..."
+git pull --ff-only origin main
 
-echo "3️⃣ Installing dependencies..."
+echo "2) Activating virtual environment..."
+if [ -f ".nexusenv/bin/activate" ]; then
+  # shellcheck disable=SC1091
+  source .nexusenv/bin/activate
+elif [ -f ".venv/bin/activate" ]; then
+  # shellcheck disable=SC1091
+  source .venv/bin/activate
+else
+  echo "Warning: no local virtual environment found (.nexusenv or .venv)."
+fi
+
+echo "3) Installing dependencies..."
 pip install -r requirements.txt
 
-echo "4️⃣ Running migrations..."
+echo "4) Verifying model changes have migrations..."
+python manage.py makemigrations --check --dry-run
+
+echo "5) Applying database migrations..."
 python manage.py migrate --noinput
 
-echo "5️⃣ Collecting static files..."
+echo "6) Ensuring no unapplied campus_nexus migrations remain..."
+if python manage.py showmigrations campus_nexus | grep -q '\[ \]'; then
+  echo "Error: unapplied campus_nexus migrations detected after migrate."
+  exit 1
+fi
+
+echo "7) Collecting static files..."
 python manage.py collectstatic --noinput
 
-echo "6️⃣ Restarting app..."
-touch tmp/restart.txt   # Passenger restart signal
+echo "8) Restarting app..."
+mkdir -p tmp
+touch tmp/restart.txt
 
-echo "✅ Deployment complete!"
+echo "Deployment complete."
