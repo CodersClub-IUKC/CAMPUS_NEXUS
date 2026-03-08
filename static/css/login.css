@@ -9,8 +9,10 @@
 
 /* Modern login page styling */
 body.login-page {
-    background: linear-gradient(135deg, #eaedfeff 0%, #d0e7ff 100%) !important;
-    /* Subtle gradient background */
+    background:
+        linear-gradient(rgba(234, 237, 254, 0.78), rgba(208, 231, 255, 0.78)),
+        url("/static/img/home.jpg") center center / cover no-repeat fixed !important;
+    /* Branded background image with soft overlay for readability */
     min-height: 100vh !important;
     display: flex !important;
     align-items: center !important;
