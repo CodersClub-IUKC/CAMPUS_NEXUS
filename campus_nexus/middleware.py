@@ -15,7 +15,7 @@ class AssociationWhiteLabellingMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.user.is_superuser and hasattr(request.user, "association_admin"):
+        if request.user.is_authenticated and not request.user.is_superuser and hasattr(request.user, "association_admin"):
             assoc = request.user.association_admin.association
             app_config = apps.get_app_config("campus_nexus")
             # Change the association verbose name so that all models in the sidebar appear under the association name
