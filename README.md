@@ -42,3 +42,31 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+## Import members from ERP CSV
+
+Use this command to bulk import student/member data from the campus ERP export:
+
+```bash
+python manage.py import_members_csv /path/to/members.csv --dry-run
+python manage.py import_members_csv /path/to/members.csv --create-missing-relations --created-by <staff_username>
+```
+
+Expected CSV headers (aliases are supported):
+
+- `first_name`
+- `last_name`
+- `email`
+- `phone`
+- `registration_number`
+- `national_id_number`
+- `member_type` (`student`, `alumni`, `external`)
+- `faculty`
+- `course`
+- `nationality`
+
+Recommended process:
+
+1. Export CSV from ERP.
+2. Run `--dry-run` first and fix all skipped-row errors.
+3. Run the committed import command.
+4. Use admin for manual additions (guild admin or superuser only).

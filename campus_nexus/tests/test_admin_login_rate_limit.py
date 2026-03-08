@@ -14,7 +14,7 @@ TEST_CACHES = {
 @override_settings(
     ENABLE_ADMIN_LOGIN_RATE_LIMIT=True,
     ADMIN_LOGIN_MAX_ATTEMPTS=5,
-    ADMIN_LOGIN_LOCKOUT_SECONDS=30,
+    ADMIN_LOGIN_LOCKOUT_SECONDS=60,
     CACHES=TEST_CACHES,
 )
 class AdminLoginRateLimitTests(TestCase):
@@ -45,8 +45,10 @@ class AdminLoginRateLimitTests(TestCase):
         location = locked_response["Location"]
         self.assertIn("locked=1", location)
         self.assertIn("lockout_until=", location)
+        self.assertIn("lockout_remaining=60", location)
         self.assertIn("username=locked_user", location)
 
         lockout_page = self.client.get(location)
         self.assertEqual(lockout_page.status_code, 200)
         self.assertContains(lockout_page, "lockout-countdown")
+        self.assertContains(lockout_page, ">60</strong>")
