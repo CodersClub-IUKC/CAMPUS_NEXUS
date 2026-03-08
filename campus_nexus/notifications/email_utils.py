@@ -1,10 +1,15 @@
+import logging
+
 from django.conf import settings
 from django.core.mail import send_mail
+
+logger = logging.getLogger(__name__)
 
 
 def send_payment_recorded_email(*, member, association, payment, charge):
     """
-    Simple email you can test immediately.
+    Sends a payment confirmation email to the member.
+    Errors are logged but never raised — email delivery must never crash the admin page.
     """
     to_email = member.email
     if not to_email:
@@ -31,10 +36,20 @@ def send_payment_recorded_email(*, member, association, payment, charge):
 
     message += "Thank you.\nCampus Nexus"
 
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None) or settings.EMAIL_HOST_USER,
-        recipient_list=[to_email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None) or settings.EMAIL_HOST_USER,
+            recipient_list=[to_email],
+            fail_silently=False,
+        )
+    except Exception as exc:
+        # Log the error so it appears in server logs but never propagate it —
+        # a broken SMTP config must never prevent a treasurer from recording a payment.
+        logger.exception(
+            "Payment confirmation email failed for member %s (payment #%s): %s",
+            member.pk,
+            payment.pk,
+            exc,
+        )

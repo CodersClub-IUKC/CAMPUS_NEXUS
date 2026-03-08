@@ -13,6 +13,19 @@ __pycache__/
 *.log
 db.sqlite3
 media/
-staticfiles/.nexusenv/
+staticfiles/
+static/
 __pycache__/
 *.pyc
+
+# Environment / secrets — NEVER commit real credentials
+.env
+.env.local
+.env.production
+
+# Collected static
+staticfiles/
+
+# OS
+.DS_Store
+Thumbs.db
