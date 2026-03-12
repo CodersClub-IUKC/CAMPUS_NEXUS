@@ -263,6 +263,7 @@ JAZZMIN_UI_TWEAKS = {
 }
 
 ASSOCIATION_DEFAULT_THEME = ("#3b82f6", "#64748b")
+CAMPUS_NEXUS_SITE_URL = os.getenv("CAMPUS_NEXUS_SITE_URL", "http://localhost:8000")
 
 # ---------------------------------------------------------------------
 # Email (SMTP - env driven)

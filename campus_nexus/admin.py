@@ -20,6 +20,7 @@ from .notifications.email_utils import send_payment_recorded_email
 from campus_nexus.services.subscriptions import ensure_current_subscription_charge, recompute_overdue_flags_for_association
 from campus_nexus.services.subscription_emails import send_subscription_reminder_email
 from campus_nexus.services.audit import record_audit_event
+from campus_nexus.services.onboarding import send_onboarding_invitation_email
 
 # ---------------------------------------------------------------------
 # Mixins
@@ -285,6 +286,33 @@ class AssociationAdminAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if change:
+            return
+
+        inviter = request.user.get_full_name() or request.user.get_username()
+        try:
+            sent = send_onboarding_invitation_email(
+                user=obj.user,
+                invited_by=inviter,
+            )
+        except Exception as exc:
+            messages.warning(
+                request,
+                f"Association admin was created, but invitation email failed: {exc}",
+            )
+            return
+
+        if sent:
+            messages.success(request, f"Invitation email sent to {obj.user.email}.")
+            return
+
+        messages.warning(
+            request,
+            "Association admin was created, but no invitation email was sent because the user has no email.",
+        )
 
 # ---------------------------------------------------------------------
 # Core models
