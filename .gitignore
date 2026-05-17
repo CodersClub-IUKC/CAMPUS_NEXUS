@@ -29,3 +29,22 @@ staticfiles/
 # OS
 .DS_Store
 Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Build & Distribution
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Django
+*.pot
+locale/
