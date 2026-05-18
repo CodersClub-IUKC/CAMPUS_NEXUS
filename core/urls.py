@@ -23,6 +23,7 @@ from django.conf.urls.static import static
 from core.settings import common
 
 from campus_nexus.forms import StaffPasswordResetForm
+from campus_nexus import admin_views as campus_admin_views
 
 urlpatterns = [
     path(
@@ -58,6 +59,7 @@ urlpatterns = [
         ),
         name="password_reset_complete",
     ),
+    path('admin/campus_nexus/billing-dashboard/', campus_admin_views.billing_dashboard, name='billing_dashboard'),
     path('admin/', admin.site.urls),
     path("api/v2/campus_nexus/", include('campus_nexus.urls')),
 ]

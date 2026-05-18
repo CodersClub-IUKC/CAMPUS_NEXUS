@@ -137,3 +137,11 @@ def membership_removed_email(sender, instance: Membership, **kwargs):
             association=association,
         )
     )
+
+@receiver([post_save, post_delete], sender=Payment)
+def update_bill_membership_status(sender, instance: Payment, **kwargs):
+    """Auto-update BillMembership status when payment recorded/updated/deleted"""
+    charge = getattr(instance, 'charge', None)
+    if charge and charge.bill_membership:
+        bill_mem = charge.bill_membership
+        bill_mem.update_status_from_payments()
