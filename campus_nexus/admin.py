@@ -1251,6 +1251,7 @@ class ChargeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         "amount_paid_col",
         "balance_col",
         "status",
+        "bill_link",
         "due_date",
         "is_overdue",
     )
@@ -1259,6 +1260,7 @@ class ChargeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         "is_overdue",
         "purpose",
         "fee__fee_type",
+        "bill_membership__bill",
         "association",
     )
     search_fields = (
@@ -1267,6 +1269,7 @@ class ChargeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         "membership__member__last_name",
         "membership__member__email",
         "association__name",
+        "bill_membership__bill__title",
     )
     ordering = ("-due_date", "-created_at")
 
@@ -1276,6 +1279,7 @@ class ChargeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         "association",
         "membership",
         "fee",
+        "bill_membership",
         "purpose",
         "title",
         "description",
@@ -1443,6 +1447,13 @@ class ChargeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             return format_html("<b style='color:green;'>0</b>")
         return format_html("<b style='color:#b45309;'>{}</b>", bal)
     balance_col.short_description = "Balance"
+
+    def bill_link(self, obj):
+        if obj.bill_membership:
+            return obj.bill_membership.bill.title
+        return "—"
+    bill_link.short_description = "Bill"
+    bill_link.admin_order_field = 'bill_membership__bill__title'
 
     # ---------------------------
     # Admin action (selected)
@@ -2296,3 +2307,315 @@ class AnnouncementAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             obj.faculty = None
 
         super().save_model(request, obj, form, change)
+
+from django.urls import path
+from django.shortcuts import render, redirect
+from django.http import HttpResponseForbidden, HttpResponseRedirect
+from django.views.decorators.http import require_http_methods
+from django.db.models import Sum, Count, Q
+from .models import BillableItem, Bill, BillMembership
+from django.utils.html import format_html
+
+def format_currency(amount, currency="UGX"):
+    if amount is None:
+        return "—"
+    return f"{currency} {amount:,.0f}"
+
+@admin.register(BillableItem)
+class BillableItemAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = ('name', 'association', 'amount', 'category', 'is_active', 'created_at')
+    list_filter = ('association', 'category', 'is_active', 'is_recurring', 'created_at')
+    search_fields = ('name', 'description', 'association__name')
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('association', 'name', 'description', 'category')
+        }),
+        ('Pricing', {
+            'fields': ('amount',)
+        }),
+        ('Recurrence', {
+            'fields': ('is_recurring', 'recurrence_type'),
+            'description': 'Enable recurring billing for automated bill generation'
+        }),
+        ('Status', {
+            'fields': ('is_active',)
+        }),
+    )
+    
+    readonly_fields = ('created_by', 'created_at', 'updated_at')
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        if self.is_association_admin(request) and not (request.user.is_superuser or self.is_guild_admin(request)):
+            obj.association = request.user.association_admin.association
+        super().save_model(request, obj, form, change)
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
+            return qs
+        assoc_admin = getattr(request.user, "association_admin", None)
+        if assoc_admin:
+            return qs.filter(association=assoc_admin.association)
+        return qs.none()
+
+@admin.register(Bill)
+class BillAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = (
+        'title', 'association', 'status', 'total_members_billed_col',
+        'total_amount_due_formatted', 'total_amount_collected_formatted',
+        'total_balance_formatted', 'due_date', 'created_at'
+    )
+    list_filter = (
+        'association', 'status', 'attachment_type',
+        'created_at', 'due_date'
+    )
+    search_fields = ('title', 'description', 'association__name')
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('association', 'billable_item', 'description')
+        }),
+        ('Bill Details', {
+            'fields': ('issue_date', 'due_date', 'attachment_type')
+        }),
+        ('Status & Control', {
+            'fields': ('status',)
+        }),
+    )
+    
+    readonly_fields = (
+        'created_by', 'created_at', 'updated_at',
+        'issue_date'
+    )
+    
+    actions = [
+        'activate_bills',
+        'cancel_bills',
+        'attach_to_selective_members',
+        'attach_to_all_active_members'
+    ]
+    
+    def get_readonly_fields(self, request, obj=None):
+        ro_fields = list(super().get_readonly_fields(request, obj))
+        if obj and obj.status == 'active':
+            ro_fields.append('association')
+            ro_fields.append('billable_item')
+        return tuple(ro_fields)
+    
+    def total_members_billed_col(self, obj):
+        return getattr(obj, 'members_count', 0)
+    total_members_billed_col.short_description = "Members Billed"
+    
+    def total_amount_due_formatted(self, obj):
+        return format_currency(getattr(obj, 'total_due', 0))
+    total_amount_due_formatted.short_description = "Total Amount Due"
+    
+    def total_amount_collected_formatted(self, obj):
+        return format_currency(getattr(obj, 'total_collected', 0))
+    total_amount_collected_formatted.short_description = "Total Collected"
+    
+    def total_balance_formatted(self, obj):
+        total_due = getattr(obj, 'total_due', 0) or 0
+        total_collected = getattr(obj, 'total_collected', 0) or 0
+        total_waived = getattr(obj, 'total_waived', 0) or 0
+        balance = total_due - total_collected - total_waived
+        return format_currency(max(0, balance))
+    total_balance_formatted.short_description = "Total Balance"
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        qs = qs.annotate(
+            members_count=Count('memberships', filter=~Q(memberships__status='cancelled'), distinct=True),
+            total_due=Sum('memberships__amount_due', filter=~Q(memberships__status='cancelled')),
+            total_collected=Sum('memberships__charges__payments__amount_paid', filter=Q(memberships__charges__payments__status='recorded')),
+            total_waived=Sum('memberships__amount_waived', filter=~Q(memberships__status='cancelled'))
+        )
+        if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
+            return qs
+        assoc_admin = getattr(request.user, "association_admin", None)
+        if assoc_admin:
+            return qs.filter(association=assoc_admin.association)
+        return qs.none()
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        if self.is_association_admin(request) and not (request.user.is_superuser or self.is_guild_admin(request)):
+            obj.association = request.user.association_admin.association
+        super().save_model(request, obj, form, change)
+    
+    @admin.action(description="Activate selected bills")
+    def activate_bills(self, request, queryset):
+        updated = queryset.filter(status='draft').update(status='active')
+        self.message_user(request, f"{updated} bill(s) activated.")
+    
+    @admin.action(description="Cancel selected bills")
+    def cancel_bills(self, request, queryset):
+        updated = queryset.exclude(status='cancelled').update(status='cancelled')
+        self.message_user(request, f"{updated} bill(s) cancelled.")
+    
+    @admin.action(description="Attach selected bills to specific members")
+    def attach_to_selective_members(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(request, "Please select exactly one bill to attach to specific members.", level=messages.ERROR)
+            return
+        bill = queryset.first()
+        return HttpResponseRedirect(f'attach-members/{bill.id}/')
+    
+    @admin.action(description="Attach selected bills to ALL ACTIVE members")
+    def attach_to_all_active_members(self, request, queryset):
+        count = 0
+        for bill in queryset.filter(status='draft'):
+            memberships = Membership.objects.filter(
+                association=bill.association,
+                status='active'
+            ).exclude(
+                bills__bill=bill
+            )
+            
+            bill_memberships = [
+                BillMembership(
+                    bill=bill,
+                    membership=membership,
+                    amount_due=bill.amount
+                ) for membership in memberships
+            ]
+            BillMembership.objects.bulk_create(bill_memberships, ignore_conflicts=True)
+            count += len(bill_memberships)
+            
+            bill.status = 'active'
+            bill.save(update_fields=['status'])
+        
+        from django.contrib import messages
+        self.message_user(request, f"Successfully attached bills to {count} member(s).", level=messages.SUCCESS)
+        
+    def get_urls(self):
+        urls = super().get_urls()
+        from django.urls import path
+        from .admin_views import attach_bill_to_members
+        custom_urls = [
+            path(
+                'attach-members/<int:bill_id>/',
+                self.admin_site.admin_view(attach_bill_to_members),
+                name='campus_nexus_bill_attach_members',
+            )
+        ]
+        return custom_urls + urls
+
+@admin.register(BillMembership)
+class BillMembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = (
+        'member_name', 'bill_title', 'amount_due_formatted',
+        'amount_paid_formatted', 'amount_waived_formatted', 'balance_formatted', 'status',
+        'paid_at'
+    )
+    list_filter = (
+        'status', 'bill__association', 'assigned_at', 'paid_at',
+        'bill__due_date'
+    )
+    search_fields = (
+        'membership__member__first_name',
+        'membership__member__last_name',
+        'bill__title'
+    )
+    
+    fieldsets = (
+        ('Bill & Member', {
+            'fields': ('bill', 'membership')
+        }),
+        ('Amount & Status', {
+            'fields': (
+                'amount_due', 'amount_waived', 'status',
+            )
+        }),
+        ('Payment Timeline', {
+            'fields': ('assigned_at', 'paid_at')
+        }),
+        ('Waiver Information', {
+            'fields': ('waived_at', 'waived_by', 'waive_reason'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    readonly_fields = ('assigned_at',)
+    
+    actions = ['waive_selected_bills', 'unwaive_bills']
+    
+    def member_name(self, obj):
+        return obj.membership.member.full_name
+    member_name.short_description = "Member"
+    member_name.admin_order_field = 'membership__member__first_name'
+    
+    def bill_title(self, obj):
+        return obj.bill.title
+    bill_title.short_description = "Bill"
+    bill_title.admin_order_field = 'bill__title'
+    
+    def amount_due_formatted(self, obj):
+        return format_currency(obj.amount_due)
+    amount_due_formatted.short_description = "Amount Due"
+    
+    def amount_paid_formatted(self, obj):
+        return format_currency(getattr(obj, 'paid_total', 0))
+    amount_paid_formatted.short_description = "Amount Paid"
+    
+    def amount_waived_formatted(self, obj):
+        return format_currency(obj.amount_waived)
+    amount_waived_formatted.short_description = "Amount Waived"
+    
+    def balance_formatted(self, obj):
+        paid = getattr(obj, 'paid_total', 0) or 0
+        waived = obj.amount_waived or 0
+        balance = obj.amount_due - paid - waived
+        return format_currency(max(0, balance))
+    balance_formatted.short_description = "Balance"
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        qs = qs.annotate(
+            paid_total=Sum('charges__payments__amount_paid', filter=Q(charges__payments__status='recorded'))
+        )
+        if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
+            return qs
+        assoc_admin = getattr(request.user, "association_admin", None)
+        if assoc_admin:
+            return qs.filter(bill__association=assoc_admin.association)
+        return qs.none()
+    
+    @admin.action(description="Waive selected member bills")
+    def waive_selected_bills(self, request, queryset):
+        if queryset.count() != 1:
+            from django.contrib import messages
+            self.message_user(request, "Please select exactly one bill to waive at a time.", level=messages.ERROR)
+            return
+        bm = queryset.first()
+        return HttpResponseRedirect(f'{bm.id}/waive/')
+    
+    @admin.action(description="Unwaive (mark as unpaid/partial)")
+    def unwaive_bills(self, request, queryset):
+        for bm in queryset.filter(status='waived'):
+            bm.amount_waived = 0
+            bm.status = 'unpaid'
+            bm.waived_at = None
+            bm.waived_by = None
+            bm.waive_reason = ''
+            bm.save()
+            bm.update_status_from_payments()
+        from django.contrib import messages
+        self.message_user(request, "Selected bills unwaived and status recalculated.", level=messages.SUCCESS)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        from django.urls import path
+        from .admin_views import waive_bill_membership
+        custom_urls = [
+            path(
+                '<int:billmembership_id>/waive/',
+                self.admin_site.admin_view(waive_bill_membership),
+                name='campus_nexus_billmembership_waive',
+            )
+        ]
+        return custom_urls + urls

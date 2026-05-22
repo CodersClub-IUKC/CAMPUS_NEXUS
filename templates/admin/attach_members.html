@@ -1,0 +1,426 @@
+{% extends "admin/base_site.html" %}
+{% load admin_urls static %}
+
+{% block title %}Attach Members to Bill{% endblock %}
+
+{% block content %}
+<style>
+#content-main {
+    display: flex !important;
+    justify-content: center !important;
+    float: none !important;
+    width: 100% !important;
+}
+/* Premium Multi-select Styles */
+.premium-select-wrapper {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    padding: 16px;
+    margin-bottom: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.search-container {
+    position: relative;
+    margin-bottom: 12px;
+}
+.premium-select-wrapper .search-input {
+    width: 100%;
+    padding: 12px 12px 12px 40px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    font-size: 15px !important;
+    outline: none !important;
+    transition: all 0.2s ease;
+    box-sizing: border-box !important;
+    height: auto !important;
+    line-height: normal !important;
+}
+.premium-select-wrapper .search-input:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+}
+.search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    width: 18px;
+    height: 18px;
+}
+
+.selected-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.selected-pills:empty {
+    margin-bottom: 0;
+}
+.pill {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e40af;
+    padding: 6px 12px;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    animation: popIn 0.2s ease-out;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.pill-remove {
+    cursor: pointer;
+    color: #60a5fa;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s;
+    line-height: 1;
+}
+.pill-remove:hover {
+    color: #1d4ed8;
+}
+
+.dropdown-list {
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #f8fafc;
+}
+.dropdown-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.dropdown-item:last-child {
+    border-bottom: none;
+}
+.dropdown-item:hover {
+    background: #f1f5f9;
+}
+.dropdown-item.d-none {
+    display: none !important;
+}
+.dropdown-item.selected {
+    display: none; /* Hide from list when selected */
+}
+.member-name {
+    font-weight: 500;
+    color: #334155;
+}
+.member-reg {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+.premium-select-wrapper .action-btn {
+    background: white !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 8px 16px !important;
+    border-radius: 6px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    color: #475569 !important;
+    cursor: pointer !important;
+    transition: all 0.15s;
+    height: auto !important;
+    line-height: normal !important;
+}
+.premium-select-wrapper .action-btn:hover {
+    background: #f8fafc !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+}
+
+/* Hide original checkboxes */
+.native-checkbox-list {
+    display: none;
+}
+
+@keyframes popIn {
+    0% { transform: scale(0.9); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.form-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-top: 8px;
+}
+.btn-primary-attach {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2d6a9f 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    padding: 11px 24px !important;
+    border-radius: 7px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    box-shadow: 0 2px 8px rgba(30,58,95,0.25) !important;
+    transition: opacity 0.2s, box-shadow 0.2s !important;
+    letter-spacing: 0.01em !important;
+}
+.btn-primary-attach:hover { opacity: 0.9 !important; box-shadow: 0 4px 12px rgba(30,58,95,0.35) !important; }
+.btn-cancel-attach {
+    display: inline-block;
+    padding: 10px 20px !important;
+    background: #fff !important;
+    color: #475569 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 7px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    text-decoration: none !important;
+    transition: all 0.15s;
+}
+.btn-cancel-attach:hover { background: #f8fafc !important; border-color: #94a3b8 !important; color: #0f172a !important; }
+</style>
+
+<div id="content-main">
+<div style="max-width: 720px; margin: 0 auto; padding: 0 8px;">
+<div style="
+    background: linear-gradient(135deg, #1e3a5f 0%, #2d6a9f 100%);
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 4px 12px rgba(30, 58, 95, 0.18);
+">
+    <div style="
+        background: rgba(255,255,255,0.15);
+        border-radius: 8px;
+        padding: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    ">
+        <svg width="28" height="28" fill="none" stroke="white" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+    </div>
+    <div>
+        <p style="margin:0; font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,0.6);">Attach Bill</p>
+        <h1 style="margin:4px 0 8px; font-size:22px; font-weight:700; color:#ffffff; line-height:1.3;">{{ bill.title }}</h1>
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            <span style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:rgba(255,255,255,0.75); font-weight:500;">
+                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                {{ bill.association.name }}
+            </span>
+            <span style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:rgba(255,255,255,0.75); font-weight:500;">
+                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                UGX {{ bill.amount|floatformat:0 }}
+            </span>
+        </div>
+    </div>
+</div>
+    
+    {% if messages %}
+        <ul class="messagelist">
+            {% for message in messages %}
+                <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+    
+    <form method="post">
+        {% csrf_token %}
+        
+        <div class="module" style="margin-bottom: 30px;">
+            <p class="help" style="margin-bottom: 15px; font-size: 14px; color: #64748b;">Search and select which members should receive this bill. Only active members without this bill are shown.</p>
+            
+            <div class="premium-select-wrapper">
+                <div class="search-container">
+                    <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    <input type="text" id="memberSearch" class="search-input" placeholder="Search members by name or registration number...">
+                </div>
+
+                <div id="selectedPills" class="selected-pills">
+                    <!-- Pills will be injected here via JS -->
+                </div>
+
+                <div id="dropdownList" class="dropdown-list">
+                    {% if available_members %}
+                        {% for member in available_members %}
+                            <div class="dropdown-item" data-id="{{ member.id }}" data-search="{{ member.member.full_name|lower }} {{ member.member.registration_number|default:member.member.email|lower }}">
+                                <div>
+                                    <div class="member-name">{{ member.member.full_name }}</div>
+                                    <div class="member-reg">{{ member.member.registration_number|default:member.member.email }}</div>
+                                </div>
+                                <svg width="20" height="20" fill="none" stroke="#94a3b8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m-6-6h12"></path></svg>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div style="padding: 16px; color: #64748b; text-align: center;">No eligible members found or all active members already have this bill.</div>
+                    {% endif %}
+                </div>
+
+                {% if available_members %}
+                <div class="action-buttons">
+                    <button type="button" id="selectAllBtn" class="action-btn">Select All (Visible)</button>
+                    <button type="button" id="deselectAllBtn" class="action-btn">Deselect All</button>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Hidden native checkboxes for form submission -->
+            <div class="native-checkbox-list">
+                {% for member in available_members %}
+                    <input type="checkbox" name="members" value="{{ member.id }}" id="chk_{{ member.id }}" data-name="{{ member.member.full_name }}" />
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn-primary-attach">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                Attach Members
+            </button>
+            <a href="{% url 'admin:campus_nexus_bill_change' bill.id %}" class="btn-cancel-attach">Cancel</a>
+        </div>
+    </form>
+</div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('memberSearch');
+    const dropdownItems = document.querySelectorAll('.dropdown-item');
+    const pillsContainer = document.getElementById('selectedPills');
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    const deselectAllBtn = document.getElementById('deselectAllBtn');
+
+    // Search functionality
+    if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+            const term = e.target.value.toLowerCase().trim();
+            dropdownItems.forEach(item => {
+                if (item.classList.contains('selected')) return; // Ignore selected items
+                const searchStr = item.getAttribute('data-search') || '';
+                if (term === '' || searchStr.includes(term)) {
+                    item.classList.remove('d-none');
+                } else {
+                    item.classList.add('d-none');
+                }
+            });
+        });
+    }
+
+    // Handle Item Selection
+    dropdownItems.forEach(item => {
+        item.addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            selectMember(id);
+        });
+    });
+
+    function selectMember(id) {
+        const item = document.querySelector(`.dropdown-item[data-id="${id}"]`);
+        const checkbox = document.getElementById(`chk_${id}`);
+        
+        if (!item || !checkbox || checkbox.checked) return;
+
+        // Check native box
+        checkbox.checked = true;
+        
+        // Hide from dropdown
+        item.classList.add('selected');
+
+        // Create pill
+        const name = checkbox.getAttribute('data-name');
+        const pill = document.createElement('div');
+        pill.className = 'pill';
+        pill.setAttribute('data-id', id);
+        pill.innerHTML = `
+            ${name}
+            <button type="button" class="pill-remove" aria-label="Remove">&times;</button>
+        `;
+        
+        // Handle pill removal
+        pill.querySelector('.pill-remove').addEventListener('click', function() {
+            deselectMember(id);
+        });
+
+        pillsContainer.appendChild(pill);
+    }
+
+    function deselectMember(id) {
+        const item = document.querySelector(`.dropdown-item[data-id="${id}"]`);
+        const checkbox = document.getElementById(`chk_${id}`);
+        const pill = document.querySelector(`.pill[data-id="${id}"]`);
+
+        if (!item || !checkbox) return;
+
+        // Uncheck native box
+        checkbox.checked = false;
+
+        // Remove pill
+        if (pill) pill.remove();
+
+        // Show in dropdown again (respecting current search filter)
+        item.classList.remove('selected');
+        
+        if (searchInput) {
+            const term = searchInput.value.toLowerCase().trim();
+            const searchStr = item.getAttribute('data-search') || '';
+            if (term === '' || searchStr.includes(term)) {
+                item.classList.remove('d-none');
+            } else {
+                item.classList.add('d-none');
+            }
+        }
+    }
+
+    // Select All Visible
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function() {
+            dropdownItems.forEach(item => {
+                if (!item.classList.contains('selected') && !item.classList.contains('d-none')) {
+                    selectMember(item.getAttribute('data-id'));
+                }
+            });
+        });
+    }
+    
+    if (deselectAllBtn) {
+        deselectAllBtn.addEventListener('click', function() {
+            const pills = document.querySelectorAll('.pill');
+            pills.forEach(pill => {
+                deselectMember(pill.getAttribute('data-id'));
+            });
+        });
+    }
+});
+</script>
+{% endblock %}
