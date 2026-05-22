@@ -1,0 +1,244 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Waive Bill{% endblock %}
+
+{% block content %}
+<style>
+#content-main {
+    display: flex !important;
+    justify-content: center !important;
+    float: none !important;
+    width: 100% !important;
+}
+.waive-page * { box-sizing: border-box; }
+.waive-page {
+    width: 100%;
+    max-width: 640px;
+    padding: 0 16px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.waive-hero {
+    background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%);
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 4px 12px rgba(127, 29, 29, 0.25);
+}
+.waive-hero-icon {
+    background: rgba(255,255,255,0.15);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.waive-hero p { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.65); }
+.waive-hero h1 { margin: 4px 0 0; font-size: 22px; font-weight: 700; color: #fff; line-height: 1.3; }
+
+.detail-card {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+.detail-card-title {
+    padding: 14px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    background: #f8fafc;
+}
+.detail-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.detail-row:last-child { border-bottom: none; }
+.detail-row dt {
+    width: 180px;
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+}
+.detail-row dd { margin: 0; font-size: 14px; color: #1e293b; font-weight: 500; }
+.detail-row.balance-row { background: #fff7ed; }
+.detail-row.balance-row dd { color: #b45309; font-weight: 700; font-size: 16px; }
+
+.reason-card {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+.reason-card label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 8px;
+}
+.reason-textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #1e293b;
+    resize: vertical;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+}
+.reason-textarea:focus {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+.reason-help {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.waive-warning {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: #92400e;
+}
+
+.action-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-top: 4px;
+}
+.btn-danger {
+    background: #dc2626 !important;
+    color: #fff !important;
+    border: none !important;
+    padding: 10px 22px !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: background 0.2s !important;
+    box-shadow: 0 2px 4px rgba(220,38,38,0.2) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+}
+.btn-danger:hover { background: #b91c1c !important; }
+.btn-cancel {
+    background: #fff !important;
+    color: #475569 !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 10px 20px !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    text-decoration: none !important;
+    display: inline-block;
+    transition: all 0.15s;
+}
+.btn-cancel:hover { background: #f8fafc !important; border-color: #94a3b8 !important; color: #0f172a !important; }
+</style>
+
+<div id="content-main">
+<div class="waive-page">
+
+    {% if messages %}
+        <ul class="messagelist">
+            {% for message in messages %}
+                <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <div class="waive-hero">
+        <div class="waive-hero-icon">
+            <svg width="28" height="28" fill="none" stroke="white" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                    d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+        </div>
+        <div>
+            <p>Waive Bill</p>
+            <h1>{{ bill_membership.membership.member.full_name }}</h1>
+        </div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="detail-card">
+            <div class="detail-card-title">Bill Summary</div>
+            <dl style="margin:0;">
+                <div class="detail-row">
+                    <dt>Bill</dt>
+                    <dd>{{ bill_membership.bill.title }}</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Original Amount</dt>
+                    <dd>UGX {{ bill_membership.amount_due|floatformat:0 }}</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Already Paid</dt>
+                    <dd>UGX {{ bill_membership.amount_paid_total|floatformat:0 }}</dd>
+                </div>
+                <div class="detail-row balance-row">
+                    <dt style="color: #92400e;">Balance to Waive</dt>
+                    <dd>UGX {{ bill_membership.balance|floatformat:0 }}</dd>
+                </div>
+            </dl>
+        </div>
+
+        <div class="reason-card">
+            <label for="waive-reason">Waiver Reason <span style="color: #dc2626;">*</span></label>
+            <textarea id="waive-reason" name="reason" class="reason-textarea"
+                placeholder="e.g., Medical hardship, partial attendance refund, approved scholarship…"
+                required></textarea>
+            <p class="reason-help">Provide a clear justification. This will be permanently recorded against the member's bill record.</p>
+        </div>
+
+        <div class="waive-warning">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0; margin-top:1px;">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            <span>This action is <strong>irreversible</strong>. The remaining balance of <strong>UGX {{ bill_membership.balance|floatformat:0 }}</strong> will be permanently zeroed out for this member.</span>
+        </div>
+
+        <div class="action-row">
+            <button type="submit" class="btn-danger">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Confirm Waiver
+            </button>
+            <a href="{% url 'admin:campus_nexus_billmembership_change' bill_membership.id %}" class="btn-cancel">Cancel</a>
+        </div>
+    </form>
+
+</div>
+</div>
+{% endblock %}

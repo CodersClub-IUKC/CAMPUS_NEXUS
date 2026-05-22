@@ -1,0 +1,328 @@
+{% extends "admin/base_site.html" %}
+{% load humanize admin_urls %}
+
+{% block title %}Billing Dashboard{% endblock %}
+
+{% block content %}
+<style>
+#content-main {
+    display: flex !important;
+    justify-content: center !important;
+    float: none !important;
+    width: 100% !important;
+}
+.dash * { box-sizing: border-box; }
+.dash {
+    width: 100%;
+    max-width: 960px;
+    padding: 0 16px 40px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Hero Header */
+.dash-hero {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2d6a9f 100%);
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin-bottom: 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 4px 12px rgba(30, 58, 95, 0.18);
+}
+.dash-hero-icon {
+    background: rgba(255,255,255,0.15);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.dash-hero p { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.6); }
+.dash-hero h1 { margin: 4px 0 0; font-size: 22px; font-weight: 700; color: #fff; line-height: 1.3; }
+
+/* KPI Cards */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+}
+.kpi-card {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.kpi-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.kpi-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin: 0;
+}
+.kpi-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+    line-height: 1.2;
+}
+
+/* Section Cards */
+.section-card {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+.section-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+    font-size: 13px;
+    font-weight: 700;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+/* Tables */
+.dash-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.dash-table thead tr {
+    background: #f1f5f9;
+}
+.dash-table th {
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+}
+.dash-table th:first-child { text-align: left; }
+.dash-table th:not(:first-child) { text-align: right; }
+.dash-table th.center { text-align: center; }
+.dash-table td {
+    padding: 12px 16px;
+    font-size: 14px;
+    color: #334155;
+    border-bottom: 1px solid #f1f5f9;
+}
+.dash-table td:first-child { text-align: left; }
+.dash-table td:not(:first-child) { text-align: right; }
+.dash-table td.center { text-align: center; }
+.dash-table tbody tr:last-child td { border-bottom: none; }
+.dash-table tbody tr:hover { background: #f8fafc; }
+.dash-table a { color: #1d4ed8; text-decoration: none; font-weight: 500; }
+.dash-table a:hover { text-decoration: underline; }
+
+/* Progress bar */
+.prog-wrap { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.prog-bar { width: 80px; height: 8px; background: #e2e8f0; border-radius: 9999px; overflow: hidden; flex-shrink: 0; }
+.prog-fill { height: 100%; border-radius: 9999px; }
+.prog-pct { font-size: 12px; font-weight: 600; min-width: 36px; text-align: right; }
+
+/* Status badges */
+.badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+.badge-red    { background: #fee2e2; color: #991b1b; }
+.badge-amber  { background: #fef3c7; color: #92400e; }
+.badge-green  { background: #dcfce7; color: #166534; }
+
+/* Outstanding row left accent */
+.dash-table tbody .row-unpaid td:first-child { border-left: 3px solid #dc2626; }
+.dash-table tbody .row-partial td:first-child { border-left: 3px solid #f59e0b; }
+
+/* View button */
+.btn-view {
+    display: inline-block;
+    padding: 4px 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 5px;
+    background: #eff6ff;
+    color: #1d4ed8 !important;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none !important;
+    transition: all 0.15s;
+}
+.btn-view:hover { background: #dbeafe; border-color: #93c5fd; }
+</style>
+
+<div id="content-main">
+<div class="dash">
+
+    {% if no_association %}
+        <div class="dash-hero">
+            <div class="dash-hero-icon">
+                <svg width="28" height="28" fill="none" stroke="white" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                </svg>
+            </div>
+            <div>
+                <p>Overview</p>
+                <h1>Billing Dashboard</h1>
+            </div>
+        </div>
+        <p style="color: #64748b; font-size: 14px;">No association selected or available.</p>
+    {% else %}
+
+    <div class="dash-hero">
+        <div class="dash-hero-icon">
+            <svg width="28" height="28" fill="none" stroke="white" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+        </div>
+        <div>
+            <p>Billing Dashboard</p>
+            <h1>{{ association.name }}</h1>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background: #dcfce7;">
+                <svg width="18" height="18" fill="none" stroke="#16a34a" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <p class="kpi-label">Total Billed</p>
+            <p class="kpi-value">UGX {{ total_billed|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background: #dbeafe;">
+                <svg width="18" height="18" fill="none" stroke="#2563eb" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+            </div>
+            <p class="kpi-label">Collected</p>
+            <p class="kpi-value">UGX {{ total_collected|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background: #fef3c7;">
+                <svg width="18" height="18" fill="none" stroke="#d97706" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            </div>
+            <p class="kpi-label">Outstanding</p>
+            <p class="kpi-value">UGX {{ total_outstanding|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background: #ede9fe;">
+                <svg width="18" height="18" fill="none" stroke="#7c3aed" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            </div>
+            <p class="kpi-label">Collection Rate</p>
+            <p class="kpi-value">{{ collection_rate|floatformat:1 }}%</p>
+        </div>
+    </div>
+
+    <!-- Active Bills Table -->
+    <div class="section-card">
+        <div class="section-header">Active Bills Overview &mdash; {{ bills_count }} bill{{ bills_count|pluralize }}, {{ members_count }} member{{ members_count|pluralize }}</div>
+        {% if bill_stats %}
+        <table class="dash-table">
+            <thead>
+                <tr>
+                    <th>Bill</th>
+                    <th class="center">Members</th>
+                    <th>Total Due</th>
+                    <th>Collected</th>
+                    <th>Balance</th>
+                    <th class="center">Progress</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in bill_stats %}
+                <tr>
+                    <td><a href="{% url 'admin:campus_nexus_bill_change' stat.bill.id %}">{{ stat.bill.title }}</a></td>
+                    <td class="center">{{ stat.members }}</td>
+                    <td>UGX {{ stat.due|floatformat:0|intcomma }}</td>
+                    <td>UGX {{ stat.collected|floatformat:0|intcomma }}</td>
+                    <td style="font-weight: 700; color: {% if stat.balance > 0 %}#b45309{% else %}#16a34a{% endif %};">
+                        UGX {{ stat.balance|floatformat:0|intcomma }}
+                    </td>
+                    <td class="center">
+                        <div class="prog-wrap">
+                            <div class="prog-bar">
+                                <div class="prog-fill" style="width: {{ stat.paid_percentage }}%; background: {% if stat.paid_percentage >= 75 %}#16a34a{% elif stat.paid_percentage >= 40 %}#f59e0b{% else %}#dc2626{% endif %};"></div>
+                            </div>
+                            <span class="prog-pct" style="color: {% if stat.paid_percentage >= 75 %}#16a34a{% elif stat.paid_percentage >= 40 %}#92400e{% else %}#991b1b{% endif %};">
+                                {{ stat.paid_percentage|floatformat:0 }}%
+                            </span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p style="padding: 20px; color: #64748b; font-size: 14px;">No active bills found for this association.</p>
+        {% endif %}
+    </div>
+
+    <!-- Outstanding Members -->
+    <div class="section-card">
+        <div class="section-header">Top Outstanding Members (Up to 20)</div>
+        {% if outstanding_members %}
+        <table class="dash-table">
+            <thead>
+                <tr>
+                    <th>Member</th>
+                    <th>Bill</th>
+                    <th>Balance</th>
+                    <th class="center">Status</th>
+                    <th class="center">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in outstanding_members %}
+                <tr class="{% if item.bm.status == 'unpaid' %}row-unpaid{% elif item.bm.status == 'partial' %}row-partial{% endif %}">
+                    <td>
+                        <div style="font-weight: 600; color: #0f172a;">{{ item.bm.membership.member.full_name }}</div>
+                        <div style="font-size: 12px; color: #94a3b8;">{{ item.bm.membership.member.registration_number|default:item.bm.membership.member.email }}</div>
+                    </td>
+                    <td>{{ item.bm.bill.title }}</td>
+                    <td style="font-weight: 700; color: #b45309;">UGX {{ item.balance|floatformat:0|intcomma }}</td>
+                    <td class="center">
+                        <span class="badge {% if item.bm.status == 'unpaid' %}badge-red{% elif item.bm.status == 'partial' %}badge-amber{% else %}badge-green{% endif %}">
+                            {{ item.bm.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="center">
+                        <a href="{% url 'admin:campus_nexus_billmembership_change' item.bm.id %}" class="btn-view">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p style="padding: 20px; color: #64748b; font-size: 14px;">No outstanding member balances found.</p>
+        {% endif %}
+    </div>
+
+    {% endif %}
+</div>
+</div>
+{% endblock %}

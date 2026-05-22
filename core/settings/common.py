@@ -14,6 +14,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.humanize",
     "django_extensions",
     "rest_framework",
     "rest_framework_simplejwt",
@@ -233,6 +234,16 @@ JAZZMIN_SETTINGS = {
     },
     # Add a language dropdown into the admin
     "language_chooser": False,
+    "custom_links": {
+        "campus_nexus": [
+            {
+                "name": "Billing Dashboard",
+                "url": "billing_dashboard",
+                "icon": "fas fa-chart-pie",
+                "permissions": ["campus_nexus.view_bill"],
+            }
+        ]
+    },
 }
 
 # UI Tweaks for colors and theme

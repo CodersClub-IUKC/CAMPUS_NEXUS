@@ -331,6 +331,15 @@ class Charge(models.Model):
 
     # Optional link to your Fee (for dues)
     fee = models.ForeignKey(Fee, on_delete=models.SET_NULL, null=True, blank=True, related_name="charges")
+    
+    bill_membership = models.ForeignKey(
+        'BillMembership',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='charges',
+        help_text="Link to bill membership (new billing system)"
+    )
 
     purpose = models.CharField(max_length=30, choices=PURPOSE_CHOICES, default="other")
     title = models.CharField(max_length=200, blank=True, default="")
@@ -776,3 +785,246 @@ class Announcement(models.Model):
 
     def __str__(self):
         return self.title
+
+class BillableItem(models.Model):
+    CATEGORY_CHOICES = [
+        ('membership_fee', 'Membership Fee'),
+        ('event', 'Event Fee'),
+        ('merchandise', 'Merchandise'),
+        ('donation', 'Donation'),
+        ('other', 'Other'),
+    ]
+    
+    association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name='billable_items')
+    name = models.CharField(max_length=200, help_text="e.g., Annual Membership, Gala Ticket")
+    description = models.TextField(blank=True, help_text="Detailed description of this billable item")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, help_text="Amount per member in UGX")
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='other')
+    
+    # Recurrence settings
+    is_recurring = models.BooleanField(default=False, help_text="Create recurring bills from this item")
+    recurrence_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('one_time', 'One-Time'),
+            ('monthly', 'Monthly'),
+            ('yearly', 'Yearly'),
+        ],
+        null=True,
+        blank=True
+    )
+    
+    # Status
+    is_active = models.BooleanField(default=True, help_text="Inactive items won't appear in dropdowns")
+    
+    # Metadata
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ('association', 'name')
+        verbose_name = "Billable Item"
+        verbose_name_plural = "Billable Items"
+    
+    def __str__(self):
+        return f"[{self.association.name}] {self.name} - UGX {self.amount:,.0f}"
+
+class Bill(models.Model):
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('active', 'Active'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    ATTACHMENT_TYPE_CHOICES = [
+        ('selective', 'Selective Members'),
+        ('all_active', 'All Active Members'),
+    ]
+    
+    association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name='bills')
+    billable_item = models.ForeignKey(
+        BillableItem,
+        on_delete=models.PROTECT,
+        related_name='bills',
+        help_text="Template used to create this bill"
+    )
+    
+    # Bill details
+    title = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Override billable item name if needed. Leave blank to auto-fill."
+    )
+    description = models.TextField(blank=True, help_text="Additional details or terms")
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Amount per member. Leave blank to auto-fill from billable item."
+    )
+    
+    # Timeline
+    issue_date = models.DateField(auto_now_add=True, help_text="Date bill was created")
+    due_date = models.DateField(null=True, blank=True, help_text="Payment deadline")
+    
+    # Attachment settings
+    attachment_type = models.CharField(
+        max_length=20,
+        choices=ATTACHMENT_TYPE_CHOICES,
+        default='selective',
+        help_text="Choose how to attach this bill to members"
+    )
+    
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    
+    # Metadata
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_bills'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Bill"
+        verbose_name_plural = "Bills"
+    
+    def __str__(self):
+        return f"[{self.association.name}] {self.title} - {self.get_status_display()}"
+        
+    def clean(self):
+        super().clean()
+        if hasattr(self, 'billable_item') and self.billable_item:
+            if not self.title:
+                self.title = self.billable_item.name
+            if self.amount is None:
+                self.amount = self.billable_item.amount
+                
+    def save(self, *args, **kwargs):
+        if hasattr(self, 'billable_item') and self.billable_item:
+            if not self.title:
+                self.title = self.billable_item.name
+            if self.amount is None:
+                self.amount = self.billable_item.amount
+        super().save(*args, **kwargs)
+    
+    @property
+    def total_members_billed(self):
+        return self.memberships.exclude(status='cancelled').count()
+    
+    @property
+    def total_amount_due(self):
+        return self.memberships.exclude(status='cancelled').aggregate(
+            total=models.Sum('amount_due')
+        )['total'] or 0
+    
+    @property
+    def total_amount_collected(self):
+        from django.db.models import Sum
+        return self.memberships.aggregate(
+            total=Sum('charges__payments__amount_paid', 
+                     filter=models.Q(charges__payments__status='recorded'))
+        )['total'] or 0
+    
+    @property
+    def total_balance(self):
+        return self.total_amount_due - self.total_amount_collected
+    
+    def save(self, *args, **kwargs):
+        # Auto-fill amount from billable item
+        if self.amount is None and self.billable_item:
+            self.amount = self.billable_item.amount
+        
+        # Auto-fill title from billable item
+        if not self.title and self.billable_item:
+            self.title = self.billable_item.name
+        
+        super().save(*args, **kwargs)
+
+class BillMembership(models.Model):
+    STATUS_CHOICES = [
+        ('unpaid', 'Unpaid'),
+        ('partial', 'Partial Payment'),
+        ('paid', 'Paid'),
+        ('waived', 'Waived'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name='memberships')
+    membership = models.ForeignKey(
+        Membership,
+        on_delete=models.CASCADE,
+        related_name='bills',
+        help_text="Association member this bill is attached to"
+    )
+    
+    # Amount tracking
+    amount_due = models.DecimalField(max_digits=12, decimal_places=2)
+    amount_waived = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='unpaid')
+    
+    # Timeline
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    waived_at = models.DateTimeField(null=True, blank=True)
+    
+    # Waiver info
+    waived_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='waived_bills'
+    )
+    waive_reason = models.TextField(blank=True, help_text="Why was this bill waived?")
+    
+    class Meta:
+        ordering = ['status', '-assigned_at']
+        unique_together = ('bill', 'membership')
+        verbose_name = "Bill Membership"
+        verbose_name_plural = "Bill Memberships"
+    
+    def __str__(self):
+        return f"{self.membership.member.full_name} - {self.bill.title} ({self.get_status_display()})"
+    
+    @property
+    def amount_paid_total(self):
+        from django.db.models import Sum
+        return self.charges.aggregate(
+            total=Sum('payments__amount_paid',
+                     filter=models.Q(payments__status='recorded'))
+        )['total'] or 0
+    
+    @property
+    def balance(self):
+        paid = self.amount_paid_total
+        remaining = self.amount_due - paid - self.amount_waived
+        return max(0, remaining)
+    
+    def update_status_from_payments(self):
+        """Auto-update status based on payment amount"""
+        if self.status == 'cancelled':
+            return
+        
+        paid = self.amount_paid_total
+        remaining = self.amount_due - paid - self.amount_waived
+        
+        if self.amount_waived > 0 and remaining <= 0:
+            self.status = 'waived'
+        elif paid <= 0 and self.amount_waived == 0:
+            self.status = 'unpaid'
+        elif remaining > 0:
+            self.status = 'partial'
+        else:
+            self.status = 'paid'
+            self.paid_at = timezone.now()
+        
+        self.save(update_fields=['status', 'paid_at'])
