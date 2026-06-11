@@ -1,21 +1,27 @@
-from dataclasses import fields
-from django.utils import timezone
-from urllib import request
-from django.conf import settings
+from datetime import timedelta
+
 from django.contrib import admin, messages
 from django import forms
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Sum
-from django.core.mail import send_mail
 from django.db import transaction
-from django.utils.html import format_html
-from django.shortcuts import redirect
+from django.db.models import Count, Q, Sum
+from django.http import HttpResponseForbidden, HttpResponseRedirect
+from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
 from django.urls import path, resolve
-from datetime import timedelta
+from django.utils import timezone
+from django.utils.html import format_html
+from django.views.decorators.http import require_http_methods
 
-from campus_nexus.models import *
-from .finance_utils import get_or_create_charge_for_fee, create_charge_custom
+from campus_nexus.models import (
+    Announcement, Association, AssociationAdmin, AuditLog,
+    Bill, BillableItem, BillMembership,
+    Cabinet, CabinetMember, Charge, Course,
+    Dean, Event, Expense, Faculty, Fee, Feedback,
+    Guild, GuildCabinet, GuildExecutive,
+    Member, Membership, Payment,
+)
+from campus_nexus.services.charges import get_or_create_charge_for_fee, create_charge_custom
 from .notifications.email_utils import send_payment_recorded_email
 from campus_nexus.services.subscriptions import ensure_current_subscription_charge, recompute_overdue_flags_for_association
 from campus_nexus.services.subscription_emails import send_subscription_reminder_email
@@ -25,6 +31,24 @@ from campus_nexus.services.onboarding import send_onboarding_invitation_email
 # ---------------------------------------------------------------------
 # Mixins
 # ---------------------------------------------------------------------
+class SuperuserOnlyMixin:
+    """Restricts an admin class to superusers only."""
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+
 class CheckUserIdentityMixin:
     def is_superuser(self, request):
         return request.user.is_superuser
@@ -214,55 +238,23 @@ class AssociationPresidentInline(admin.StackedInline):
 # Role assignment models (superuser only)
 # ---------------------------------------------------------------------
 @admin.register(Guild)
-class GuildAdmin(admin.ModelAdmin):
+class GuildAdmin(SuperuserOnlyMixin, admin.ModelAdmin):
     list_display = ("user",)
     search_fields = ("user__username", "user__email")
     ordering = ("user__username",)
     raw_id_fields = ("user",)
 
-    def has_module_permission(self, request):
-        return request.user.is_superuser
-
-    def has_view_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def has_add_permission(self, request):
-        return request.user.is_superuser
-
-    def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
-
 
 @admin.register(Dean)
-class DeanAdmin(admin.ModelAdmin):
-    """
-    Dean of Students role assignment.
-    Creating a record here grants the selected user the 'Dean' role.
-    """
+class DeanAdmin(SuperuserOnlyMixin, admin.ModelAdmin):
+    """Dean of Students role assignment. Creating a record here grants the Dean role."""
     list_display = ("user",)
     search_fields = ("user__username", "user__email")
     raw_id_fields = ("user",)
 
-    def has_module_permission(self, request):
-        return request.user.is_superuser
 
-    def has_view_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def has_add_permission(self, request):
-        return request.user.is_superuser
-
-    def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
-    
 @admin.register(AssociationAdmin)
-class AssociationAdminAdmin(admin.ModelAdmin):
+class AssociationAdminAdmin(SuperuserOnlyMixin, admin.ModelAdmin):
     list_display = ("association", "user", "title")
     search_fields = (
         "association__name",
@@ -271,21 +263,6 @@ class AssociationAdminAdmin(admin.ModelAdmin):
         "user__last_name",
     )
     fields = ("association", "user", "title", "bio", "profile_photo")
-
-    def has_module_permission(self, request):
-        return request.user.is_superuser
-
-    def has_view_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def has_add_permission(self, request):
-        return request.user.is_superuser
-
-    def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -2308,12 +2285,6 @@ class AnnouncementAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 
         super().save_model(request, obj, form, change)
 
-from django.urls import path
-from django.shortcuts import render, redirect
-from django.http import HttpResponseForbidden, HttpResponseRedirect
-from django.views.decorators.http import require_http_methods
-from django.db.models import Sum, Count, Q
-from .models import BillableItem, Bill, BillMembership
 from django.utils.html import format_html
 
 def format_currency(amount, currency="UGX"):

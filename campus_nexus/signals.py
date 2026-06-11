@@ -43,8 +43,6 @@ def add_guild_model_permissions(sender, instance: Guild, created: bool, **kwargs
     Ensure that when a Guild is created, its user is granted all necessary permissions
     for managing guild-related models.
     """
-    print("="*100)
-    print(f"Guild signal triggered for {instance.user.username}")
     if created:
         user = instance.user
 
@@ -67,6 +65,8 @@ def add_guild_model_permissions(sender, instance: Guild, created: bool, **kwargs
 @receiver([post_save, post_delete], sender=Payment)
 def recompute_charge_after_payment(sender, instance: Payment, **kwargs):
     charge = instance.charge
+    if charge is None:
+        return
     charge.recompute_status()
     charge.save(update_fields=["status"])
 

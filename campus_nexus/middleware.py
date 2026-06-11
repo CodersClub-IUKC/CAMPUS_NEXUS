@@ -2,7 +2,6 @@ import hashlib
 import time
 from urllib.parse import urlencode
 
-from django.apps import apps
 from django.conf import settings
 from django.core.cache import cache
 from django.http import HttpResponseRedirect
@@ -14,10 +13,14 @@ class AssociationWhiteLabellingMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.user.is_authenticated and not request.user.is_superuser and hasattr(request.user, "association_admin"):
-            assoc = request.user.association_admin.association
-            app_config = apps.get_app_config("campus_nexus")
-            app_config.verbose_name = assoc.name
+        # Store the label on the request object — thread-safe, per-request scope.
+        # Templates and admin can read request.association_label instead of mutating
+        # the shared app_config.verbose_name, which caused race conditions under load.
+        request.association_label = None
+        if request.user.is_authenticated and not request.user.is_superuser:
+            assoc_admin = getattr(request.user, "association_admin", None)
+            if assoc_admin:
+                request.association_label = assoc_admin.association.name
         response = self.get_response(request)
         return response
 

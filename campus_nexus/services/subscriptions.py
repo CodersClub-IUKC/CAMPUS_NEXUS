@@ -84,10 +84,13 @@ def ensure_current_subscription_charge(membership: Membership) -> Charge | None:
 
 def recompute_overdue_flags_for_association(association_id: int) -> None:
     today = timezone.localdate()
-    qs = Charge.objects.filter(association_id=association_id, purpose="subscription_fee").select_related("fee")
-    for c in qs:
+    charges = list(
+        Charge.objects.filter(association_id=association_id, purpose="subscription_fee")
+        .select_related("fee")
+    )
+    for c in charges:
         grace = int(c.fee.grace_days) if c.fee_id else 0
         due = c.due_date + timedelta(days=grace) if c.due_date and grace else c.due_date
         c.is_overdue = bool(due and c.balance > 0 and today > due)
         c.recompute_status()
-        c.save(update_fields=["status", "is_overdue"])
+    Charge.objects.bulk_update(charges, ["status", "is_overdue"])

@@ -1,485 +1,932 @@
 {% extends "admin/index.html" %}
-{% load i18n static dashboard_tags %}
+{% load i18n static dashboard_tags humanize %}
 
 {% block content %}
 
-  {# ---------- DEAN DASHBOARD ---------- #}
-  {% if request.user.is_authenticated and request.user.dean %}
+{# ============================================================ #}
+{#  SUPERUSER DASHBOARD                                          #}
+{# ============================================================ #}
+{% if request.user.is_superuser %}
 
-    {% dean_dashboard_data as d %}
+  {% superuser_dashboard_data as su %}
 
-    <div class="content">
-      <div class="container-fluid">
+  <div class="container-fluid">
 
-        <div class="mb-3">
-          <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
+    <div class="mb-4">
+      <h3 class="mb-1">Welcome back, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
+      <div class="text-muted">System-wide overview — all associations, all members.</div>
+    </div>
 
-          <div class="mt-2 mb-2" style="opacity:.85;">
-            <strong>Top association by members:</strong>
-            {{ d.top_assoc_name }} — {{ d.top_assoc_members }} members ({{ d.top_assoc_percent }}%)
-          </div>
+    {# --- Stat cards --- #}
+    <div class="row g-3 mb-4">
 
-          <div style="opacity:.75;">
-            Here’s your Campus Nexus overview across all associations.
-          </div>
-        </div>
-
-        {# --- Summary cards --- #}
-        <div class="row">
-          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <div style="opacity:.7;">Total Associations</div>
-                <div style="font-size:28px; font-weight:800;">{{ d.total_associations }}</div>
-              </div>
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center bg-primary bg-opacity-10" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-user-friends text-primary"></i>
             </div>
-          </div>
-
-          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <div style="opacity:.7;">Total Members (unique)</div>
-                <div style="font-size:28px; font-weight:800;">{{ d.total_members }}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <div style="opacity:.7;">Faculty-based Associations</div>
-                <div style="font-size:28px; font-weight:800;">{{ d.faculty_based_associations }}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <div style="opacity:.7;">Non Faculty-based Associations</div>
-                <div style="font-size:28px; font-weight:800;">{{ d.non_faculty_based_associations }}</div>
-              </div>
+            <div>
+              <div class="text-muted small">Total Members</div>
+              <div class="fw-bold fs-4">{{ su.total_members|intcomma }}</div>
             </div>
           </div>
         </div>
+      </div>
 
-        {# --- Charts row 1 --- #}
-        <div class="row">
-          <div class="col-lg-4 col-md-12 mb-3">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <div class="mb-2" style="font-weight:700;">Members by Association</div>
-                <canvas id="membersByAssocChart" height="180"></canvas>
-              </div>
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center bg-info bg-opacity-10" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-university text-info"></i>
             </div>
-          </div>
-
-          <div class="col-lg-4 col-md-12 mb-3">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <div class="mb-2" style="font-weight:700;">Association Type Split</div>
-                <canvas id="assocTypeChart" height="180"></canvas>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-lg-4 col-md-12 mb-3">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <div class="mb-2" style="font-weight:700;">Events by Association</div>
-                <canvas id="eventsByAssocChart" height="180"></canvas>
-              </div>
+            <div>
+              <div class="text-muted small">Associations</div>
+              <div class="fw-bold fs-4">{{ su.total_associations }}</div>
             </div>
           </div>
         </div>
+      </div>
 
-        {# --- Charts row 2 --- #}
-        <div class="row">
-          <div class="col-lg-6 col-md-12 mb-3">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <div class="mb-2" style="font-weight:700;">Member Type Distribution</div>
-                <canvas id="memberTypeChart" height="180"></canvas>
-              </div>
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center bg-success bg-opacity-10" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-id-card text-success"></i>
             </div>
-          </div>
-
-          <div class="col-lg-6 col-md-12 mb-3">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <div style="font-weight:700;">Latest Announcements</div>
-                  <div style="opacity:.7;">Published: {{ d.announcements.published_count }}</div>
-                </div>
-
-                {% if d.announcements.latest %}
-                  <div class="list-group">
-                    {% for a in d.announcements.latest %}
-                      <div class="list-group-item">
-                        <div class="d-flex justify-content-between">
-                          <div style="font-weight:700;">{{ a.title }}</div>
-                          <small style="opacity:.65;">{{ a.created_at|date:"M d, Y" }}</small>
-                        </div>
-                        <div style="opacity:.8;">
-                          {% if a.audience == "association" and a.association %}
-                            <span class="badge bg-info text-dark">Association: {{ a.association.name }}</span>
-                          {% elif a.audience == "faculty" and a.faculty %}
-                            <span class="badge bg-warning text-dark">Faculty: {{ a.faculty.name }}</span>
-                          {% else %}
-                            <span class="badge bg-secondary">Global</span>
-                          {% endif %}
-                        </div>
-                        <div style="opacity:.8; margin-top:6px;">
-                          {{ a.message|truncatechars:140 }}
-                        </div>
-                      </div>
-                    {% endfor %}
-                  </div>
-                {% else %}
-                  <div style="opacity:.7;">No announcements yet.</div>
-                {% endif %}
-              </div>
+            <div>
+              <div class="text-muted small">Active Memberships</div>
+              <div class="fw-bold fs-4">{{ su.active_memberships|intcomma }}</div>
             </div>
           </div>
         </div>
+      </div>
 
-        {# Links #}
-        <div class="row">
-          <div class="col-12 mb-3">
-            <div class="card shadow-sm">
-              <div class="card-body">
-                <div class="d-flex flex-wrap" style="gap:12px;">
-                  <a class="btn btn-primary px-3 py-2" href="{% url 'admin:campus_nexus_association_changelist' %}">View Associations</a>
-                  <a class="btn btn-outline-primary px-3 py-2" href="{% url 'admin:campus_nexus_member_changelist' %}">View Members</a>
-                  <a class="btn btn-outline-primary px-3 py-2" href="{% url 'admin:campus_nexus_membership_changelist' %}">View Memberships</a>
-                  <a class="btn btn-outline-primary px-3 py-2" href="{% url 'admin:campus_nexus_event_changelist' %}">View Events</a>
-                  <a class="btn btn-outline-primary px-3 py-2" href="{% url 'admin:campus_nexus_cabinet_changelist' %}">View Cabinets</a>
-                </div>
-              </div>
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center bg-success bg-opacity-10" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-credit-card text-success"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Total Collected</div>
+              <div class="fw-bold" style="font-size:1rem;">UGX {{ su.total_collected|floatformat:0|intcomma }}</div>
             </div>
           </div>
         </div>
+      </div>
 
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center bg-warning bg-opacity-10" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-receipt text-warning"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Total Expenses</div>
+              <div class="fw-bold" style="font-size:1rem;">UGX {{ su.total_expenses|floatformat:0|intcomma }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100 {% if su.overdue_count > 0 %}border-danger border-start border-3{% endif %}">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center {% if su.overdue_count > 0 %}bg-danger bg-opacity-10{% else %}bg-secondary bg-opacity-10{% endif %}" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-exclamation-circle {% if su.overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %}"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Overdue Charges</div>
+              <div class="fw-bold fs-4 {% if su.overdue_count > 0 %}text-danger{% endif %}">{{ su.overdue_count }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    {# --- Charts --- #}
+    <div class="row g-3 mb-4">
+      <div class="col-lg-7 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-3">Active Members by Association</div>
+            <canvas id="suTopAssocChart" height="180"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-5 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-3">Member Type Breakdown</div>
+            <canvas id="suMemberTypeChart" height="180"></canvas>
+          </div>
+        </div>
       </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-      const membersLabels = {{ d.members_by_association.labels|safe }};
-      const membersData   = {{ d.members_by_association.data|safe }};
-      const membersPct    = {{ d.members_by_association.percent|safe }};
+    {# --- Quick links --- #}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body d-flex flex-wrap gap-2">
+        <a class="btn btn-sm btn-primary" href="{% url 'admin:campus_nexus_association_changelist' %}"><i class="fas fa-university me-1"></i>Associations</a>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_member_changelist' %}"><i class="fas fa-user-friends me-1"></i>Members</a>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_membership_changelist' %}"><i class="fas fa-id-card me-1"></i>Memberships</a>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_charge_changelist' %}"><i class="fas fa-file-invoice-dollar me-1"></i>Charges</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'admin:campus_nexus_auditlog_changelist' %}"><i class="fas fa-history me-1"></i>Audit Log</a>
+      </div>
+    </div>
 
-      const evLabels = {{ d.events_by_association.labels|safe }};
-      const evData   = {{ d.events_by_association.data|safe }};
+  </div>
 
-      const typeLabels = {{ d.member_type_distribution.labels|safe }};
-      const typeData   = {{ d.member_type_distribution.data|safe }};
-      const typePct    = {{ d.member_type_distribution.percent|safe }};
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script>
+    const CHART_COLORS = ["#4c6ef5","#12b886","#fab005","#fa5252","#7950f2","#fd7e14","#20c997","#e64980"];
 
-      const assocTypeLabels = {{ d.assoc_type_split.labels|safe }};
-      const assocTypeData   = {{ d.assoc_type_split.data|safe }};
+    new Chart(document.getElementById("suTopAssocChart"), {
+      type: "bar",
+      data: {
+        labels: {{ su.top_associations.labels|safe }},
+        datasets: [{
+          label: "Active Members",
+          data: {{ su.top_associations.data|safe }},
+          backgroundColor: CHART_COLORS.slice(0, {{ su.top_associations.data|safe }}.length),
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+      }
+    });
 
-      new Chart(document.getElementById("membersByAssocChart"), {
-        type: "bar",
-        data: { labels: membersLabels, datasets: [{ label: "Members", data: membersData }] },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => {
-                  const i = ctx.dataIndex;
-                  return `Members: ${membersData[i]} (${membersPct[i]}%)`;
-                }
-              }
-            }
-          }
-        }
-      });
+    new Chart(document.getElementById("suMemberTypeChart"), {
+      type: "doughnut",
+      data: {
+        labels: {{ su.member_type_distribution.labels|safe }},
+        datasets: [{ data: {{ su.member_type_distribution.data|safe }}, backgroundColor: CHART_COLORS }]
+      },
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } }
+    });
+  </script>
 
-      new Chart(document.getElementById("assocTypeChart"), {
-        type: "doughnut",
-        data: { labels: assocTypeLabels, datasets: [{ label: "Associations", data: assocTypeData }] },
-        options: { responsive: true }
-      });
 
-      new Chart(document.getElementById("eventsByAssocChart"), {
-        type: "bar",
-        data: { labels: evLabels, datasets: [{ label: "Events", data: evData }] },
-        options: { responsive: true, plugins: { legend: { display: false } } }
-      });
+{# ============================================================ #}
+{#  DEAN DASHBOARD                                               #}
+{# ============================================================ #}
+{% elif request.user.is_authenticated and request.user.dean %}
 
-      new Chart(document.getElementById("memberTypeChart"), {
-        type: "doughnut",
-        data: { labels: typeLabels, datasets: [{ label: "Members", data: typeData }] },
-        options: {
-          responsive: true,
-          plugins: {
-            tooltip: {
-              callbacks: {
-                label: (ctx) => {
-                  const i = ctx.dataIndex;
-                  return `${typeLabels[i]}: ${typeData[i]} (${typePct[i]}%)`;
-                }
-              }
-            }
-          }
-        }
-      });
-    </script>
+  {% dean_dashboard_data as d %}
 
-  {# ---------- GUILD DASHBOARD ---------- #}
-  {% elif request.user.is_authenticated and request.user.guild %}
+  <div class="container-fluid">
 
-    {% guild_dashboard_data as g %}
+    <div class="mb-4">
+      <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
+      <div class="text-muted">Campus-wide overview across all associations.</div>
+    </div>
 
-    <div class="content">
-      <div class="container-fluid">
-        <div class="mb-3">
-          <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
-          <div style="opacity:.75;">Guild overview + announcements.</div>
-        </div>
+    {# --- Top stat cards --- #}
+    <div class="row g-3 mb-4">
 
-        <div class="row">
-          <div class="col-lg-4 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Total Associations</div>
-              <div style="font-size:28px; font-weight:800;">{{ g.total_associations }}</div>
-            </div></div>
-          </div>
-
-          <div class="col-lg-4 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Total Members</div>
-              <div style="font-size:28px; font-weight:800;">{{ g.total_members }}</div>
-            </div></div>
-          </div>
-
-          <div class="col-lg-4 col-md-12 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Announcements</div>
-              <div style="font-size:16px; font-weight:700;">
-                Published: {{ g.announcements.published }} • Drafts: {{ g.announcements.drafts }}
-              </div>
-            </div></div>
+      <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-university text-primary"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Total Associations</div>
+              <div class="fw-bold fs-3">{{ d.total_associations }}</div>
+              <div class="text-muted" style="font-size:.75rem;">{{ d.faculty_based_associations }} faculty-based</div>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div class="card shadow-sm">
+      <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-user-friends text-info"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Total Members</div>
+              <div class="fw-bold fs-3">{{ d.total_members|intcomma }}</div>
+              <div class="text-muted" style="font-size:.75rem;">Top: {{ d.top_assoc_name }} ({{ d.top_assoc_percent }}%)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-id-card text-success"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Active Memberships</div>
+              <div class="fw-bold fs-3">{{ d.membership_status.active|default:0|intcomma }}</div>
+              <div class="text-muted" style="font-size:.75rem;">{{ d.membership_status.suspended|default:0 }} suspended</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-warning bg-opacity-10 d-flex align-items-center justify-content-center" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-bullhorn text-warning"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Published Announcements</div>
+              <div class="fw-bold fs-3">{{ d.announcements.published_count }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    {# --- Charts row 1 --- #}
+    <div class="row g-3 mb-4">
+      <div class="col-lg-5 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
           <div class="card-body">
-            <div style="font-weight:700;" class="mb-2">Latest Announcements</div>
-            {% if g.announcements.latest %}
-              <div class="list-group">
-                {% for a in g.announcements.latest %}
-                  <div class="list-group-item">
-                    <div class="d-flex justify-content-between">
-                      <div style="font-weight:700;">{{ a.title }}</div>
-                      <small style="opacity:.65;">{{ a.created_at|date:"M d, Y" }}</small>
+            <div class="fw-semibold mb-3">Members by Association</div>
+            <canvas id="membersByAssocChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-3">Association Types</div>
+            <canvas id="assocTypeChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4 col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-3">Member Type Distribution</div>
+            <canvas id="memberTypeChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# --- Charts row 2 + announcements --- #}
+    <div class="row g-3 mb-3">
+      <div class="col-lg-5 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-3">Events by Association</div>
+            <canvas id="eventsByAssocChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-7 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div class="fw-semibold">Latest Announcements</div>
+              <span class="badge bg-secondary">{{ d.announcements.published_count }} published</span>
+            </div>
+            {% if d.announcements.latest %}
+              <div class="list-group list-group-flush">
+                {% for ann in d.announcements.latest %}
+                  <div class="list-group-item px-0">
+                    <div class="d-flex justify-content-between align-items-start">
+                      <div class="fw-semibold" style="font-size:.9rem;">{{ ann.title }}</div>
+                      <small class="text-muted ms-2 text-nowrap">{{ ann.created_at|date:"M d, Y" }}</small>
                     </div>
-                    <div style="opacity:.8;">
-                      {% if a.is_published %}
-                        <span class="badge bg-success">Published</span>
+                    <div class="mt-1">
+                      {% if ann.audience == "association" and ann.association %}
+                        <span class="badge bg-info text-dark">{{ ann.association.name }}</span>
+                      {% elif ann.audience == "faculty" and ann.faculty %}
+                        <span class="badge bg-warning text-dark">{{ ann.faculty.name }}</span>
                       {% else %}
-                        <span class="badge bg-warning text-dark">Draft</span>
+                        <span class="badge bg-secondary">Global</span>
                       {% endif %}
                     </div>
-                    <div style="opacity:.8; margin-top:6px;">{{ a.message|truncatechars:160 }}</div>
+                    <div class="text-muted mt-1" style="font-size:.82rem;">{{ ann.message|truncatechars:120 }}</div>
                   </div>
                 {% endfor %}
               </div>
             {% else %}
-              <div style="opacity:.7;">No announcements yet.</div>
+              <div class="text-muted">No announcements yet.</div>
             {% endif %}
           </div>
         </div>
-
       </div>
     </div>
 
-  {# ---------- ASSOCIATION ADMIN DASHBOARD ---------- #}
-  {% elif request.user.is_authenticated and request.user.association_admin %}
-
-    {% association_dashboard_data as a %}
-
-    <div class="content">
-      <div class="container-fluid">
-        <div class="mb-3">
-          <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
-          <div style="opacity:.75;">{{ a.association_name }} overview + announcements.</div>
-        </div>
-
-        <div class="row">
-          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Total Members</div>
-              <div style="font-size:28px; font-weight:800;">{{ a.total_members }}</div>
-            </div></div>
-          </div>
-
-          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Total Events</div>
-              <div style="font-size:28px; font-weight:800;">{{ a.total_events }}</div>
-            </div></div>
-          </div>
-
-          <div class="col-lg-6 col-md-12 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <div style="opacity:.7;">Income vs Expenses</div>
-                  <small style="opacity:.65;">Recorded totals</small>
-                </div>
-
-                <div class="d-flex flex-wrap align-items-center" style="gap:14px;">
-                  <div style="width:180px; max-width:100%;">
-                    <canvas id="associationIncomeExpenseChart" height="150"></canvas>
-                  </div>
-                  <div style="min-width:220px;">
-                    <div style="font-weight:700;">Income: UGX {{ a.finance.total_collected|floatformat:0 }}</div>
-                    <div style="font-weight:700;">Expenses: UGX {{ a.finance.total_expenses|floatformat:0 }}</div>
-                    <div style="opacity:.75;">Net: UGX {{ a.finance.net_position|floatformat:0 }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Net Position</div>
-              <div style="font-size:24px; font-weight:800;">UGX {{ a.finance.net_position|floatformat:0 }}</div>
-              <div style="font-size:13px; opacity:.75;">
-                {% if a.finance.net_position >= 0 %}
-                  Surplus ({{ a.finance.net_margin_percent }}%)
-                {% else %}
-                  Deficit ({{ a.finance.net_margin_percent }}%)
-                {% endif %}
-              </div>
-            </div></div>
-          </div>
-
-          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Outstanding Balance</div>
-              <div style="font-size:24px; font-weight:800;">UGX {{ a.finance.outstanding_balance|floatformat:0 }}</div>
-            </div></div>
-          </div>
-
-          <div class="col-lg-3 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Collected This Month</div>
-              <div style="font-size:24px; font-weight:800;">UGX {{ a.finance.this_month_collected|floatformat:0 }}</div>
-            </div></div>
-          </div>
-
-          <div class="col-lg-3 col-md-12 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Spent This Month</div>
-              <div style="font-size:24px; font-weight:800;">UGX {{ a.finance.this_month_expenses|floatformat:0 }}</div>
-            </div></div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-lg-6 col-md-6 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Total Billed</div>
-              <div style="font-size:24px; font-weight:800;">UGX {{ a.finance.total_billed|floatformat:0 }}</div>
-            </div></div>
-          </div>
-
-          <div class="col-lg-6 col-md-12 col-sm-12 mb-3">
-            <div class="card shadow-sm h-100"><div class="card-body">
-              <div style="opacity:.7;">Open Charges</div>
-              <div style="font-size:16px; font-weight:700;">
-                {{ a.finance.open_charges_count }} open • {{ a.finance.overdue_charges_count }} overdue
-              </div>
-            </div></div>
-          </div>
-        </div>
-
-        <div class="card shadow-sm mb-3">
-          <div class="card-body">
-            <div class="d-flex flex-wrap align-items-center justify-content-between" style="gap:10px;">
-              <div>
-                <div style="font-weight:700;">Quick Actions</div>
-                <div style="opacity:.75;">Manage membership and finance records faster.</div>
-              </div>
-              <div class="d-flex flex-wrap" style="gap:8px;">
-                <a class="btn btn-success" href="{% url 'admin:campus_nexus_membership_add' %}">+ Add Membership</a>
-                <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_membership_changelist' %}">View Memberships</a>
-                <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_payment_add' %}">Record Payment</a>
-                <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_expense_add' %}">Record Expense</a>
-                <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_charge_changelist' %}">View Charges</a>
-                <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_expense_changelist' %}">View Expenses</a>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <div style="font-weight:700;" class="mb-2">Latest Announcements</div>
-            {% if a.announcements.latest %}
-              <div class="list-group">
-                {% for x in a.announcements.latest %}
-                  <div class="list-group-item">
-                    <div class="d-flex justify-content-between">
-                      <div style="font-weight:700;">{{ x.title }}</div>
-                      <small style="opacity:.65;">{{ x.created_at|date:"M d, Y" }}</small>
-                    </div>
-                    <div style="opacity:.8; margin-top:6px;">{{ x.message|truncatechars:160 }}</div>
-                  </div>
-                {% endfor %}
-              </div>
-            {% else %}
-              <div style="opacity:.7;">No announcements yet.</div>
-            {% endif %}
-          </div>
-        </div>
-
+    <div class="card border-0 shadow-sm">
+      <div class="card-body d-flex flex-wrap gap-2">
+        <a class="btn btn-sm btn-primary" href="{% url 'admin:campus_nexus_association_changelist' %}"><i class="fas fa-university me-1"></i>Associations</a>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_member_changelist' %}"><i class="fas fa-user-friends me-1"></i>Members</a>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_membership_changelist' %}"><i class="fas fa-id-card me-1"></i>Memberships</a>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_event_changelist' %}"><i class="fas fa-calendar-alt me-1"></i>Events</a>
       </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-      const assocIncome = parseFloat("{{ a.finance.total_collected|default_if_none:'0' }}") || 0;
-      const assocExpenses = parseFloat("{{ a.finance.total_expenses|default_if_none:'0' }}") || 0;
-      const assocChartEl = document.getElementById("associationIncomeExpenseChart");
+  </div>
 
-      if (assocChartEl) {
-        new Chart(assocChartEl, {
-          type: "doughnut",
-          data: {
-            labels: ["Income", "Expenses"],
-            datasets: [{
-              data: [assocIncome, assocExpenses],
-              backgroundColor: ["#198754", "#dc3545"],
-              borderWidth: 1,
-            }],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { position: "bottom" },
-              tooltip: {
-                callbacks: {
-                  label: (ctx) => `${ctx.label}: UGX ${Number(ctx.raw || 0).toLocaleString()}`,
-                },
-              },
-            },
-          },
-        });
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script>
+    const CHART_COLORS = ["#4c6ef5","#12b886","#fab005","#fa5252","#7950f2","#fd7e14","#20c997","#e64980","#339af0","#ff6b6b","#94d82d","#f06595"];
+
+    new Chart(document.getElementById("membersByAssocChart"), {
+      type: "bar",
+      data: {
+        labels: {{ d.members_by_association.labels|safe }},
+        datasets: [{
+          label: "Members",
+          data: {{ d.members_by_association.data|safe }},
+          backgroundColor: "#4c6ef5",
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const pct = {{ d.members_by_association.percent|safe }}[ctx.dataIndex];
+                return `${ctx.raw} members (${pct}%)`;
+              }
+            }
+          }
+        },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
       }
-    </script>
+    });
 
-  {% else %}
-    {{ block.super }}
-  {% endif %}
+    new Chart(document.getElementById("assocTypeChart"), {
+      type: "doughnut",
+      data: {
+        labels: {{ d.assoc_type_split.labels|safe }},
+        datasets: [{ data: {{ d.assoc_type_split.data|safe }}, backgroundColor: ["#4c6ef5","#12b886"] }]
+      },
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } }
+    });
+
+    new Chart(document.getElementById("memberTypeChart"), {
+      type: "doughnut",
+      data: {
+        labels: {{ d.member_type_distribution.labels|safe }},
+        datasets: [{ data: {{ d.member_type_distribution.data|safe }}, backgroundColor: CHART_COLORS }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: "bottom" },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const pct = {{ d.member_type_distribution.percent|safe }}[ctx.dataIndex];
+                return `${ctx.label}: ${ctx.raw} (${pct}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    new Chart(document.getElementById("eventsByAssocChart"), {
+      type: "bar",
+      data: {
+        labels: {{ d.events_by_association.labels|safe }},
+        datasets: [{
+          label: "Events",
+          data: {{ d.events_by_association.data|safe }},
+          backgroundColor: "#fab005",
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+      }
+    });
+  </script>
+
+
+{# ============================================================ #}
+{#  GUILD ADMIN DASHBOARD                                        #}
+{# ============================================================ #}
+{% elif request.user.is_authenticated and request.user.guild %}
+
+  {% guild_dashboard_data as g %}
+
+  <div class="container-fluid">
+
+    <div class="mb-4">
+      <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
+      <div class="text-muted">Guild overview across all associations.</div>
+    </div>
+
+    <div class="row g-3 mb-4">
+
+      <div class="col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-university text-primary"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Total Associations</div>
+              <div class="fw-bold fs-3">{{ g.total_associations }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-user-friends text-info"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Total Members</div>
+              <div class="fw-bold fs-3">{{ g.total_members|intcomma }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-warning bg-opacity-10 d-flex align-items-center justify-content-center" style="width:48px;height:48px;flex-shrink:0;">
+              <i class="fas fa-bullhorn text-warning"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Announcements</div>
+              <div class="fw-bold fs-5">
+                <span class="text-success">{{ g.announcements.published }} published</span>
+                &nbsp;·&nbsp;
+                <span class="text-warning">{{ g.announcements.drafts }} draft{{ g.announcements.drafts|pluralize }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-lg-7 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-3">Active Members by Association</div>
+            <canvas id="guildTopAssocChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-5 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-3">Member Type Distribution</div>
+            <canvas id="guildMemberTypeChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div class="fw-semibold">Latest Announcements</div>
+              <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_announcement_changelist' %}">View All</a>
+            </div>
+            {% if g.announcements.latest %}
+              <div class="list-group list-group-flush">
+                {% for ann in g.announcements.latest %}
+                  <div class="list-group-item px-0">
+                    <div class="d-flex justify-content-between align-items-start">
+                      <div class="fw-semibold" style="font-size:.9rem;">{{ ann.title }}</div>
+                      <div class="d-flex align-items-center gap-2 ms-2">
+                        {% if ann.is_published %}
+                          <span class="badge bg-success">Published</span>
+                        {% else %}
+                          <span class="badge bg-warning text-dark">Draft</span>
+                        {% endif %}
+                        <small class="text-muted text-nowrap">{{ ann.created_at|date:"M d, Y" }}</small>
+                      </div>
+                    </div>
+                    <div class="text-muted mt-1" style="font-size:.82rem;">{{ ann.message|truncatechars:160 }}</div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="text-muted">No announcements yet.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script>
+    const CHART_COLORS = ["#4c6ef5","#12b886","#fab005","#fa5252","#7950f2","#fd7e14","#20c997","#e64980"];
+
+    new Chart(document.getElementById("guildTopAssocChart"), {
+      type: "bar",
+      data: {
+        labels: {{ g.top_associations.labels|safe }},
+        datasets: [{
+          label: "Active Members",
+          data: {{ g.top_associations.data|safe }},
+          backgroundColor: CHART_COLORS.slice(0, {{ g.top_associations.data|safe }}.length),
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+      }
+    });
+
+    new Chart(document.getElementById("guildMemberTypeChart"), {
+      type: "doughnut",
+      data: {
+        labels: {{ g.member_type_distribution.labels|safe }},
+        datasets: [{ data: {{ g.member_type_distribution.data|safe }}, backgroundColor: CHART_COLORS }]
+      },
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } }
+    });
+  </script>
+
+
+{# ============================================================ #}
+{#  ASSOCIATION ADMIN DASHBOARD                                  #}
+{# ============================================================ #}
+{% elif request.user.is_authenticated and request.user.association_admin %}
+
+  {% association_dashboard_data as a %}
+
+  <div class="container-fluid">
+
+    <div class="mb-4">
+      <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
+      <div class="text-muted">{{ a.association_name }} dashboard</div>
+    </div>
+
+    {# --- Row 1: key stats --- #}
+    <div class="row g-3 mb-3">
+
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center" style="width:44px;height:44px;flex-shrink:0;">
+              <i class="fas fa-user-friends text-primary"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Total Members</div>
+              <div class="fw-bold fs-4">{{ a.total_members }}</div>
+              <div class="text-muted" style="font-size:.72rem;">{{ a.active_members }} active</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center" style="width:44px;height:44px;flex-shrink:0;">
+              <i class="fas fa-calendar-alt text-info"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Events</div>
+              <div class="fw-bold fs-4">{{ a.total_events }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center" style="width:44px;height:44px;flex-shrink:0;">
+              <i class="fas fa-credit-card text-success"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Collected</div>
+              <div class="fw-bold" style="font-size:.95rem;">UGX {{ a.finance.total_collected|floatformat:0|intcomma }}</div>
+              <div class="text-muted" style="font-size:.72rem;">This month: {{ a.finance.this_month_collected|floatformat:0|intcomma }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-warning bg-opacity-10 d-flex align-items-center justify-content-center" style="width:44px;height:44px;flex-shrink:0;">
+              <i class="fas fa-receipt text-warning"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Expenses</div>
+              <div class="fw-bold" style="font-size:.95rem;">UGX {{ a.finance.total_expenses|floatformat:0|intcomma }}</div>
+              <div class="text-muted" style="font-size:.72rem;">This month: {{ a.finance.this_month_expenses|floatformat:0|intcomma }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100 {% if a.finance.net_position < 0 %}border-danger border-start border-3{% endif %}">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle {% if a.finance.net_position >= 0 %}bg-success bg-opacity-10{% else %}bg-danger bg-opacity-10{% endif %} d-flex align-items-center justify-content-center" style="width:44px;height:44px;flex-shrink:0;">
+              <i class="fas fa-balance-scale {% if a.finance.net_position >= 0 %}text-success{% else %}text-danger{% endif %}"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Net Position</div>
+              <div class="fw-bold {% if a.finance.net_position >= 0 %}text-success{% else %}text-danger{% endif %}" style="font-size:.9rem;">
+                UGX {{ a.finance.net_position|floatformat:0|intcomma }}
+              </div>
+              <div class="text-muted" style="font-size:.72rem;">{{ a.finance.net_margin_percent }}% margin</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100 {% if a.finance.overdue_charges_count > 0 %}border-danger border-start border-3{% elif a.finance.outstanding_balance > 0 %}border-warning border-start border-3{% endif %}">
+          <div class="card-body d-flex align-items-center gap-3">
+            <div class="rounded-circle {% if a.finance.overdue_charges_count > 0 %}bg-danger bg-opacity-10{% else %}bg-secondary bg-opacity-10{% endif %} d-flex align-items-center justify-content-center" style="width:44px;height:44px;flex-shrink:0;">
+              <i class="fas fa-exclamation-circle {% if a.finance.overdue_charges_count > 0 %}text-danger{% else %}text-secondary{% endif %}"></i>
+            </div>
+            <div>
+              <div class="text-muted small">Outstanding</div>
+              <div class="fw-bold {% if a.finance.overdue_charges_count > 0 %}text-danger{% endif %}" style="font-size:.9rem;">
+                UGX {{ a.finance.outstanding_balance|floatformat:0|intcomma }}
+              </div>
+              <div class="text-muted" style="font-size:.72rem;">{{ a.finance.overdue_charges_count }} overdue</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    {# --- Row 2: collection rate + membership status --- #}
+    <div class="row g-3 mb-3">
+
+      <div class="col-lg-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="text-muted small mb-1">Collection Rate</div>
+            <div class="fw-bold fs-3
+              {% if a.finance.collection_rate >= 80 %}text-success
+              {% elif a.finance.collection_rate >= 50 %}text-warning
+              {% else %}text-danger{% endif %}">
+              {{ a.finance.collection_rate }}%
+            </div>
+            <div class="progress mt-2" style="height:6px;">
+              <div class="progress-bar
+                {% if a.finance.collection_rate >= 80 %}bg-success
+                {% elif a.finance.collection_rate >= 50 %}bg-warning
+                {% else %}bg-danger{% endif %}"
+                style="width:{{ a.finance.collection_rate }}%"></div>
+            </div>
+            <div class="text-muted mt-1" style="font-size:.75rem;">
+              UGX {{ a.finance.total_collected|floatformat:0|intcomma }} of {{ a.finance.total_billed|floatformat:0|intcomma }} billed
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="text-muted small mb-2">Membership Status</div>
+            <div class="d-flex flex-column gap-1">
+              <div class="d-flex justify-content-between">
+                <span><span class="badge bg-success me-1">●</span>Active</span>
+                <span class="fw-bold">{{ a.membership_status.active|default:0 }}</span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span><span class="badge bg-secondary me-1">●</span>Inactive</span>
+                <span class="fw-bold">{{ a.membership_status.inactive|default:0 }}</span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span><span class="badge bg-warning text-dark me-1">●</span>Suspended</span>
+                <span class="fw-bold">{{ a.membership_status.suspended|default:0 }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-6 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-2">6-Month Income vs Expenses</div>
+            <canvas id="trendChart" height="100"></canvas>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    {# --- Row 3: income/expense doughnut + recent payments --- #}
+    <div class="row g-3 mb-3">
+
+      <div class="col-lg-4 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-2">Income vs Expenses</div>
+            <div class="d-flex align-items-center gap-3">
+              <div style="max-width:160px;flex-shrink:0;">
+                <canvas id="assocIEChart" height="160"></canvas>
+              </div>
+              <div>
+                <div class="text-muted small">Income</div>
+                <div class="fw-bold text-success mb-1">UGX {{ a.finance.total_collected|floatformat:0|intcomma }}</div>
+                <div class="text-muted small">Expenses</div>
+                <div class="fw-bold text-danger mb-1">UGX {{ a.finance.total_expenses|floatformat:0|intcomma }}</div>
+                <div class="text-muted small">Net</div>
+                <div class="fw-bold {% if a.finance.net_position >= 0 %}text-success{% else %}text-danger{% endif %}">
+                  UGX {{ a.finance.net_position|floatformat:0|intcomma }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-8 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div class="fw-semibold">Recent Payments</div>
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'admin:campus_nexus_payment_changelist' %}">View All</a>
+            </div>
+            {% if a.recent_payments %}
+              <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Member</th>
+                      <th>Purpose</th>
+                      <th class="text-end">Amount</th>
+                      <th class="text-end">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for p in a.recent_payments %}
+                      <tr>
+                        <td>{{ p.membership.member.full_name }}</td>
+                        <td class="text-muted" style="font-size:.82rem;">
+                          {{ p.charge.title|default:p.charge.get_purpose_display|default:"—"|truncatechars:30 }}
+                        </td>
+                        <td class="text-end fw-semibold text-success">UGX {{ p.amount_paid|floatformat:0|intcomma }}</td>
+                        <td class="text-end text-muted" style="font-size:.82rem;">{{ p.recorded_at|date:"M d" }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="text-muted">No payments recorded yet.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    {# --- Row 4: quick actions + announcements --- #}
+    <div class="row g-3">
+
+      <div class="col-lg-5 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-3">Quick Actions</div>
+            <div class="d-grid gap-2">
+              <a class="btn btn-success" href="{% url 'admin:campus_nexus_membership_add' %}"><i class="fas fa-plus me-1"></i>Add Membership</a>
+              <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_payment_add' %}"><i class="fas fa-credit-card me-1"></i>Record Payment</a>
+              <a class="btn btn-outline-primary" href="{% url 'admin:campus_nexus_expense_add' %}"><i class="fas fa-receipt me-1"></i>Record Expense</a>
+              <a class="btn btn-outline-secondary" href="{% url 'admin:campus_nexus_charge_changelist' %}"><i class="fas fa-file-invoice-dollar me-1"></i>View Charges</a>
+              <a class="btn btn-outline-secondary" href="{% url 'admin:campus_nexus_membership_changelist' %}"><i class="fas fa-id-card me-1"></i>View Memberships</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-7 col-md-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div class="fw-semibold">Announcements</div>
+              <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_announcement_add' %}"><i class="fas fa-plus me-1"></i>Post</a>
+            </div>
+            {% if a.announcements.latest %}
+              <div class="list-group list-group-flush">
+                {% for ann in a.announcements.latest %}
+                  <div class="list-group-item px-0">
+                    <div class="d-flex justify-content-between align-items-start">
+                      <div class="fw-semibold" style="font-size:.88rem;">{{ ann.title }}</div>
+                      <small class="text-muted ms-2 text-nowrap">{{ ann.created_at|date:"M d" }}</small>
+                    </div>
+                    <div class="text-muted mt-1" style="font-size:.8rem;">{{ ann.message|truncatechars:100 }}</div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="text-muted">No announcements yet.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script>
+    new Chart(document.getElementById("trendChart"), {
+      type: "bar",
+      data: {
+        labels: {{ a.monthly_trend.labels|safe }},
+        datasets: [
+          {
+            label: "Income",
+            data: {{ a.monthly_trend.income|safe }},
+            backgroundColor: "rgba(25,135,84,0.7)",
+            borderRadius: 3,
+          },
+          {
+            label: "Expenses",
+            data: {{ a.monthly_trend.expenses|safe }},
+            backgroundColor: "rgba(220,53,69,0.7)",
+            borderRadius: 3,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: "top" },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: UGX ${Number(ctx.raw).toLocaleString()}`
+            }
+          }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: (v) => "UGX " + Number(v).toLocaleString() } }
+        }
+      }
+    });
+
+    new Chart(document.getElementById("assocIEChart"), {
+      type: "doughnut",
+      data: {
+        labels: ["Income", "Expenses"],
+        datasets: [{
+          data: [
+            parseFloat("{{ a.finance.total_collected|default_if_none:'0' }}") || 0,
+            parseFloat("{{ a.finance.total_expenses|default_if_none:'0' }}") || 0,
+          ],
+          backgroundColor: ["#198754", "#dc3545"],
+          borderWidth: 1,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: { label: (ctx) => `${ctx.label}: UGX ${Number(ctx.raw).toLocaleString()}` }
+          }
+        }
+      }
+    });
+  </script>
+
+
+{% else %}
+  {{ block.super }}
+{% endif %}
 
 {% endblock %}

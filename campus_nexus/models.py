@@ -299,10 +299,13 @@ class Fee(models.Model):
     allow_installments = models.BooleanField(default=True)
 
     def save(self, *args, **kwargs):
-        if self.fee_type == "subscription":
-            self.reminder_days_before_due = [3]
-        else:
-            self.reminder_days_before_due = []
+        # Only apply defaults when the field hasn't been explicitly set,
+        # so admin-configured values are preserved on subsequent saves.
+        if not self.reminder_days_before_due:
+            if self.fee_type == "subscription":
+                self.reminder_days_before_due = [3]
+            else:
+                self.reminder_days_before_due = []
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -902,52 +905,42 @@ class Bill(models.Model):
         
     def clean(self):
         super().clean()
-        if hasattr(self, 'billable_item') and self.billable_item:
+        if self.billable_item_id:
             if not self.title:
                 self.title = self.billable_item.name
             if self.amount is None:
                 self.amount = self.billable_item.amount
-                
+
     def save(self, *args, **kwargs):
-        if hasattr(self, 'billable_item') and self.billable_item:
+        if self.billable_item_id:
             if not self.title:
                 self.title = self.billable_item.name
             if self.amount is None:
                 self.amount = self.billable_item.amount
         super().save(*args, **kwargs)
-    
+
     @property
     def total_members_billed(self):
         return self.memberships.exclude(status='cancelled').count()
-    
+
     @property
     def total_amount_due(self):
         return self.memberships.exclude(status='cancelled').aggregate(
             total=models.Sum('amount_due')
         )['total'] or 0
-    
+
     @property
     def total_amount_collected(self):
-        from django.db.models import Sum
         return self.memberships.aggregate(
-            total=Sum('charges__payments__amount_paid', 
-                     filter=models.Q(charges__payments__status='recorded'))
+            total=models.Sum(
+                'charges__payments__amount_paid',
+                filter=models.Q(charges__payments__status='recorded'),
+            )
         )['total'] or 0
-    
+
     @property
     def total_balance(self):
         return self.total_amount_due - self.total_amount_collected
-    
-    def save(self, *args, **kwargs):
-        # Auto-fill amount from billable item
-        if self.amount is None and self.billable_item:
-            self.amount = self.billable_item.amount
-        
-        # Auto-fill title from billable item
-        if not self.title and self.billable_item:
-            self.title = self.billable_item.name
-        
-        super().save(*args, **kwargs)
 
 class BillMembership(models.Model):
     STATUS_CHOICES = [
