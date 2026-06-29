@@ -21,11 +21,18 @@ from django.urls import reverse_lazy
 from django.conf import settings
 from django.conf.urls.static import static
 from core.settings import common
+from django.views.generic import RedirectView
 
 from campus_nexus.forms import StaffPasswordResetForm
 from campus_nexus import admin_views as campus_admin_views
 
 urlpatterns = [
+    path("", RedirectView.as_view(pattern_name="admin:index", permanent=False), name="home"),
+    path(
+        "favicon.ico",
+        RedirectView.as_view(url="/static/img/favicon.ico", permanent=True),
+        name="favicon",
+    ),
     path(
         "admin/password_reset/",
         auth_views.PasswordResetView.as_view(

@@ -10,11 +10,17 @@
 
   {% superuser_dashboard_data as su %}
 
-  <div class="container-fluid">
+  <div class="container-fluid cnx-dashboard">
 
-    <div class="mb-4">
-      <h3 class="mb-1">Welcome back, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
-      <div class="text-muted">System-wide overview — all associations, all members.</div>
+    <div class="cnx-dashboard-hero mb-4">
+      <div>
+        <div class="cnx-eyebrow">Campus Nexus Command Center</div>
+        <h3 class="mb-1">Welcome back, {{ request.user.get_full_name|default:request.user.username }}</h3>
+        <div class="text-muted">System-wide overview across associations, members, billing, and operations.</div>
+      </div>
+      <div class="cnx-hero-mark">
+        <i class="fas fa-chart-line"></i>
+      </div>
     </div>
 
     {# --- Stat cards --- #}
@@ -179,11 +185,17 @@
 
   {% dean_dashboard_data as d %}
 
-  <div class="container-fluid">
+  <div class="container-fluid cnx-dashboard">
 
-    <div class="mb-4">
-      <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
-      <div class="text-muted">Campus-wide overview across all associations.</div>
+    <div class="cnx-dashboard-hero mb-4">
+      <div>
+        <div class="cnx-eyebrow">Dean Overview</div>
+        <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }}</h3>
+        <div class="text-muted">Campus-wide overview across all associations.</div>
+      </div>
+      <div class="cnx-hero-mark">
+        <i class="fas fa-university"></i>
+      </div>
     </div>
 
     {# --- Top stat cards --- #}
@@ -427,11 +439,17 @@
 
   {% guild_dashboard_data as g %}
 
-  <div class="container-fluid">
+  <div class="container-fluid cnx-dashboard">
 
-    <div class="mb-4">
-      <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
-      <div class="text-muted">Guild overview across all associations.</div>
+    <div class="cnx-dashboard-hero mb-4">
+      <div>
+        <div class="cnx-eyebrow">Guild Administration</div>
+        <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }}</h3>
+        <div class="text-muted">Guild overview across all associations.</div>
+      </div>
+      <div class="cnx-hero-mark">
+        <i class="fas fa-users-cog"></i>
+      </div>
     </div>
 
     <div class="row g-3 mb-4">
@@ -581,11 +599,17 @@
 
   {% association_dashboard_data as a %}
 
-  <div class="container-fluid">
+  <div class="container-fluid cnx-dashboard">
 
-    <div class="mb-4">
-      <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }} 👋</h3>
-      <div class="text-muted">{{ a.association_name }} dashboard</div>
+    <div class="cnx-dashboard-hero mb-4">
+      <div>
+        <div class="cnx-eyebrow">Association Workspace</div>
+        <h3 class="mb-1">Welcome, {{ request.user.get_full_name|default:request.user.username }}</h3>
+        <div class="text-muted">{{ a.association_name }} dashboard</div>
+      </div>
+      <div class="cnx-hero-mark">
+        <i class="fas fa-id-card"></i>
+      </div>
     </div>
 
     {# --- Row 1: key stats --- #}
