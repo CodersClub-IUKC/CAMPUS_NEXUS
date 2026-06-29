@@ -9,6 +9,94 @@
     transform: scale(1.25);  
 }
 
+/* ==========================================
+   Jazzmin Login - Campus Nexus branded background
+========================================== */
+body.jazzmin-login-page {
+    min-height: 100vh;
+    background:
+        linear-gradient(118deg, rgba(0, 213, 196, 0.28), transparent 28%),
+        linear-gradient(245deg, rgba(25, 159, 245, 0.34), transparent 32%),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 78px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 78px),
+        linear-gradient(135deg, #02043d 0%, #05095a 42%, #041a63 70%, #02043d 100%) !important;
+    background-attachment: fixed !important;
+    overflow-x: hidden;
+}
+
+body.jazzmin-login-page::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(100deg, transparent 0 34%, rgba(255, 255, 255, 0.13) 34% 34.4%, transparent 34.4% 100%),
+        linear-gradient(100deg, transparent 0 57%, rgba(0, 213, 196, 0.18) 57% 57.3%, transparent 57.3% 100%),
+        linear-gradient(100deg, transparent 0 74%, rgba(25, 159, 245, 0.16) 74% 74.3%, transparent 74.3% 100%),
+        radial-gradient(ellipse at center, transparent 0, rgba(2, 4, 61, 0.16) 56%, rgba(2, 4, 61, 0.72) 100%);
+}
+
+body.jazzmin-login-page .login-box {
+    position: relative;
+    z-index: 1;
+    width: min(92vw, 430px);
+    margin: 7vh auto;
+}
+
+body.jazzmin-login-page .login-box .card {
+    overflow: hidden;
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.58);
+    border-top: 4px solid #00d5c4;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 250, 255, 0.9)) !important;
+    box-shadow:
+        0 30px 90px rgba(0, 0, 36, 0.42),
+        0 0 0 1px rgba(25, 159, 245, 0.12) inset;
+    backdrop-filter: blur(22px) saturate(1.25);
+    -webkit-backdrop-filter: blur(22px) saturate(1.25);
+}
+
+body.jazzmin-login-page .login-box .card-body {
+    padding: 1.7rem;
+}
+
+body.jazzmin-login-page .login-box-msg {
+    color: #364152;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+body.jazzmin-login-page .input-group .form-control {
+    min-height: 44px;
+    border-radius: 12px 0 0 12px;
+    border-color: rgba(4, 26, 99, 0.14);
+    background: rgba(255, 255, 255, 0.88);
+}
+
+body.jazzmin-login-page .input-group-text {
+    border-radius: 0 12px 12px 0;
+    border-color: rgba(4, 26, 99, 0.14);
+    background: rgba(255, 255, 255, 0.88);
+    color: #041a63;
+}
+
+body.jazzmin-login-page .btn.btn-primary.btn-block {
+    border: 0;
+    border-radius: 14px;
+    background:
+        linear-gradient(135deg, #00d5c4 0%, #199ff5 48%, #05095a 100%) !important;
+    box-shadow: 0 14px 30px rgba(25, 159, 245, 0.32);
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+body.jazzmin-login-page .btn.btn-primary.btn-block:hover {
+    background:
+        linear-gradient(135deg, #05095a 0%, #199ff5 54%, #00d5c4 100%) !important;
+    transform: translateY(-1px);
+}
+
 
 /* Hide inline "original" column (often looks like an ID column) */
 .inline-group .tabular th.original,

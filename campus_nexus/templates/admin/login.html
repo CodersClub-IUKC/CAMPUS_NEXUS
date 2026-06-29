@@ -8,9 +8,56 @@
     {{ block.super }}
     <style>
       body.login-page {
+        min-height: 100vh;
         background:
-          linear-gradient(rgba(234, 237, 254, 0.78), rgba(208, 231, 255, 0.78)),
-          url("{% static 'img/home.jpg' %}") center center / cover no-repeat fixed !important;
+          linear-gradient(118deg, rgba(0, 213, 196, 0.28), transparent 28%),
+          linear-gradient(245deg, rgba(25, 159, 245, 0.34), transparent 32%),
+          repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 78px),
+          repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 78px),
+          linear-gradient(135deg, #02043d 0%, #05095a 42%, #041a63 70%, #02043d 100%) !important;
+        background-attachment: fixed;
+        overflow-x: hidden;
+      }
+
+      body.login-page::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          linear-gradient(100deg, transparent 0 34%, rgba(255, 255, 255, 0.13) 34% 34.4%, transparent 34.4% 100%),
+          linear-gradient(100deg, transparent 0 57%, rgba(0, 213, 196, 0.18) 57% 57.3%, transparent 57.3% 100%),
+          linear-gradient(100deg, transparent 0 74%, rgba(25, 159, 245, 0.16) 74% 74.3%, transparent 74.3% 100%),
+          radial-gradient(ellipse at center, transparent 0, rgba(2, 4, 61, 0.16) 56%, rgba(2, 4, 61, 0.72) 100%);
+      }
+
+      body.login-page .login-box,
+      body.login-page .register-box {
+        filter: drop-shadow(0 28px 70px rgba(0, 0, 28, 0.45));
+      }
+
+      body.login-page .card,
+      body.login-page .login-card-body,
+      body.login-page .register-card-body {
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.58);
+        border-top: 4px solid #00d5c4;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 250, 255, 0.9)) !important;
+        box-shadow: 0 30px 90px rgba(0, 0, 36, 0.42), 0 0 0 1px rgba(25, 159, 245, 0.12) inset;
+        backdrop-filter: blur(22px) saturate(1.25);
+      }
+
+      body.login-page .btn-primary,
+      body.login-page .btn-success {
+        border: 0;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #00d5c4 0%, #199ff5 48%, #05095a 100%) !important;
+        box-shadow: 0 14px 30px rgba(25, 159, 245, 0.32);
+      }
+
+      body.login-page .password-reset-link a {
+        color: #041a63;
+        font-weight: 600;
       }
     </style>
 {% endblock %}
