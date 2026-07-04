@@ -82,10 +82,7 @@
         // AdminLTE navbar is flex; we can insert a center container
         const centerWrap = document.createElement("div");
         centerWrap.id = "cnx-global-search";
-        centerWrap.style.flex = "1";
-        centerWrap.style.display = "flex";
-        centerWrap.style.justifyContent = "center";
-        centerWrap.style.alignItems = "center";
+        centerWrap.className = "cnx-global-search-wrap";
 
         // Put it after the left nav list (so it sits in the middle)
         const leftNav = nav.querySelector("ul.navbar-nav");
@@ -94,16 +91,10 @@
         // Create the form UI
         centerWrap.innerHTML = `
   <form id="cnx-global-search-form" method="GET" action="/admin/campus_nexus/membership/"
-        style="display:flex;align-items:center;gap:12px;width:min(820px, 75vw);">
+        class="cnx-global-search-form">
 
     <select id="cnx-search-target" class="form-control"
-            style="
-              height:42px;
-              line-height:42px;
-              padding:0 10px;
-              border-radius:12px;
-              max-width:190px;
-            ">
+            aria-label="Search target">
       <option value="/admin/campus_nexus/membership/" selected>Memberships</option>
       {% if request.user.is_superuser or request.user.association_admin %}
       <option value="/admin/campus_nexus/payment/">Payments</option>
@@ -116,26 +107,10 @@
     </select>
 
     <input type="text" name="q" placeholder="Search..."
-           class="form-control"
-           style="
-             height:42px;
-             line-height:42px;
-             padding:0 14px;
-             border-radius:12px;
-             flex:1;
-             min-width:300px;
-           " />
+           class="form-control" />
 
     <button type="submit" class="btn btn-primary"
-            style="
-              height:42px;
-              padding:0 18px;
-              border-radius:12px;
-              min-width:110px;
-              font-weight:600;
-              display:flex;
-              align-items:center;
-            ">
+            aria-label="Search">
       Search
     </button>
   </form>
@@ -169,57 +144,94 @@
         if (isStandalone) return;
 
         let deferredInstallPrompt = null;
+        const installButtonSelector = ".cnx-install-app-button";
+
+        function setInstallButtonsVisible(isVisible) {
+            document.querySelectorAll(installButtonSelector).forEach((button) => {
+                button.style.display = isVisible ? "inline-flex" : "none";
+            });
+        }
+
+        async function installCampusNexus() {
+            if (!deferredInstallPrompt) return;
+            setInstallButtonsVisible(false);
+            deferredInstallPrompt.prompt();
+            await deferredInstallPrompt.userChoice;
+            deferredInstallPrompt = null;
+        }
 
         function ensureInstallButton() {
             const nav = document.querySelector("nav.main-header.navbar, nav.navbar");
-            if (!nav) return null;
+            const createdButtons = [];
 
-            let button = document.getElementById("cnx-install-app-button");
-            if (button) return button;
+            if (nav && !document.getElementById("cnx-install-app-navbar")) {
+                const button = document.createElement("button");
+                button.id = "cnx-install-app-navbar";
+                button.type = "button";
+                button.className = "btn btn-outline-primary btn-sm cnx-install-app-button";
+                button.style.display = "none";
+                button.innerHTML = '<i class="fas fa-download" aria-hidden="true"></i><span class="cnx-install-app-label">Install App</span>';
+                button.setAttribute("aria-label", "Install Campus Nexus");
+                button.addEventListener("click", installCampusNexus);
 
-            button = document.createElement("button");
-            button.id = "cnx-install-app-button";
-            button.type = "button";
-            button.className = "btn btn-outline-primary btn-sm";
-            button.style.display = "none";
-            button.style.marginLeft = "8px";
-            button.style.whiteSpace = "nowrap";
-            button.innerHTML = '<i class="fas fa-download" aria-hidden="true"></i><span class="d-none d-md-inline ml-1">Install App</span>';
-            button.setAttribute("aria-label", "Install Campus Nexus");
+                const rightNav = nav.querySelector("ul.navbar-nav.ml-auto") || nav.querySelector("ul.navbar-nav:last-of-type");
+                const item = document.createElement("li");
+                item.className = "nav-item d-flex align-items-center cnx-install-app-nav-item";
+                item.appendChild(button);
 
-            const rightNav = nav.querySelector("ul.navbar-nav.ml-auto") || nav.querySelector("ul.navbar-nav:last-of-type");
-            const item = document.createElement("li");
-            item.className = "nav-item d-flex align-items-center";
-            item.appendChild(button);
-
-            if (rightNav) {
-                rightNav.insertBefore(item, rightNav.firstChild);
-            } else {
-                nav.appendChild(item);
+                if (rightNav) {
+                    rightNav.insertBefore(item, rightNav.firstChild);
+                } else {
+                    nav.appendChild(item);
+                }
+                createdButtons.push(button);
             }
 
-            button.addEventListener("click", async () => {
-                if (!deferredInstallPrompt) return;
-                button.style.display = "none";
-                deferredInstallPrompt.prompt();
-                await deferredInstallPrompt.userChoice;
-                deferredInstallPrompt = null;
-            });
+            const sidebarNav = document.querySelector("#jazzy-sidebar .nav-sidebar");
+            if (sidebarNav && !document.getElementById("cnx-install-app-sidebar")) {
+                const item = document.createElement("li");
+                item.className = "nav-item cnx-install-app-sidebar-item";
 
-            return button;
+                const button = document.createElement("button");
+                button.id = "cnx-install-app-sidebar";
+                button.type = "button";
+                button.className = "nav-link btn btn-link text-left cnx-install-app-button";
+                button.style.display = "none";
+                button.innerHTML = '<i class="nav-icon fas fa-download" aria-hidden="true"></i><p>Install App</p>';
+                button.setAttribute("aria-label", "Install Campus Nexus");
+                button.addEventListener("click", installCampusNexus);
+
+                item.appendChild(button);
+                sidebarNav.insertBefore(item, sidebarNav.children[1] || null);
+                createdButtons.push(button);
+            }
+
+            return createdButtons;
         }
+
+        function closeMobileSidebarAfterNavigation() {
+            const sidebar = document.getElementById("jazzy-sidebar");
+            if (!sidebar) return;
+
+            sidebar.addEventListener("click", (event) => {
+                const link = event.target.closest("a.nav-link");
+                if (!link || window.innerWidth > 991) return;
+                document.body.classList.remove("sidebar-open");
+            });
+        }
+
+        closeMobileSidebarAfterNavigation();
 
         window.addEventListener("beforeinstallprompt", (event) => {
             event.preventDefault();
             deferredInstallPrompt = event;
-            const button = ensureInstallButton();
-            if (button) button.style.display = "inline-flex";
+            ensureInstallButton();
+            setInstallButtonsVisible(true);
         });
 
         window.addEventListener("appinstalled", () => {
             deferredInstallPrompt = null;
-            const button = document.getElementById("cnx-install-app-button");
-            if (button) button.style.display = "none";
+            setInstallButtonsVisible(false);
         });
     })();
 

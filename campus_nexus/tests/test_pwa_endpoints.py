@@ -11,7 +11,7 @@ class PwaEndpointTests(SimpleTestCase):
         manifest = response.json()
         self.assertEqual(manifest["name"], "Campus Nexus")
         self.assertEqual(manifest["display"], "standalone")
-        self.assertEqual(manifest["start_url"], "/admin/")
+        self.assertEqual(manifest["start_url"], "/")
         self.assertIn(
             {
                 "src": "/static/img/pwa-icon-192.png",
@@ -48,3 +48,11 @@ class PwaEndpointTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "You are currently offline")
         self.assertContains(response, "CAMPUS_NEXUS.png")
+
+    def test_admin_login_page_exposes_pwa_metadata(self):
+        response = self.client.get(reverse("admin:login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'rel="manifest"')
+        self.assertContains(response, reverse("webmanifest"))
+        self.assertContains(response, 'navigator.serviceWorker.register("/service-worker.js"')

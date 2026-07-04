@@ -13,8 +13,8 @@ def webmanifest(request):
     manifest = {
         "name": "Campus Nexus",
         "short_name": "Campus Nexus",
-        "description": "Campus Nexus administration and association management.",
-        "start_url": "/admin/",
+        "description": "Campus association, membership, billing and operations management platform.",
+        "start_url": "/",
         "scope": "/",
         "display": "standalone",
         "background_color": "#ffffff",
