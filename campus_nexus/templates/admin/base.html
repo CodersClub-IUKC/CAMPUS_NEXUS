@@ -6,6 +6,12 @@
 {{ block.super }}
 
 <link rel="stylesheet" href="{% association_css_url %}">
+<link rel="manifest" href="{% url 'webmanifest' %}">
+<meta name="theme-color" content="#0b5ed7">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Campus Nexus">
+<link rel="apple-touch-icon" href="{% static 'img/pwa-icon-192.png' %}">
 {% endblock %}
 
 {% block extrajs %}
@@ -152,6 +158,71 @@
 
     addCenteredGlobalSearch();
 
+    (function setupCampusNexusPwa() {
+        if (!("serviceWorker" in navigator)) return;
+
+        window.addEventListener("load", () => {
+            navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(() => {});
+        });
+
+        const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+        if (isStandalone) return;
+
+        let deferredInstallPrompt = null;
+
+        function ensureInstallButton() {
+            const nav = document.querySelector("nav.main-header.navbar, nav.navbar");
+            if (!nav) return null;
+
+            let button = document.getElementById("cnx-install-app-button");
+            if (button) return button;
+
+            button = document.createElement("button");
+            button.id = "cnx-install-app-button";
+            button.type = "button";
+            button.className = "btn btn-outline-primary btn-sm";
+            button.style.display = "none";
+            button.style.marginLeft = "8px";
+            button.style.whiteSpace = "nowrap";
+            button.innerHTML = '<i class="fas fa-download" aria-hidden="true"></i><span class="d-none d-md-inline ml-1">Install App</span>';
+            button.setAttribute("aria-label", "Install Campus Nexus");
+
+            const rightNav = nav.querySelector("ul.navbar-nav.ml-auto") || nav.querySelector("ul.navbar-nav:last-of-type");
+            const item = document.createElement("li");
+            item.className = "nav-item d-flex align-items-center";
+            item.appendChild(button);
+
+            if (rightNav) {
+                rightNav.insertBefore(item, rightNav.firstChild);
+            } else {
+                nav.appendChild(item);
+            }
+
+            button.addEventListener("click", async () => {
+                if (!deferredInstallPrompt) return;
+                button.style.display = "none";
+                deferredInstallPrompt.prompt();
+                await deferredInstallPrompt.userChoice;
+                deferredInstallPrompt = null;
+            });
+
+            return button;
+        }
+
+        window.addEventListener("beforeinstallprompt", (event) => {
+            event.preventDefault();
+            deferredInstallPrompt = event;
+            const button = ensureInstallButton();
+            if (button) button.style.display = "inline-flex";
+        });
+
+        window.addEventListener("appinstalled", () => {
+            deferredInstallPrompt = null;
+            const button = document.getElementById("cnx-install-app-button");
+            if (button) button.style.display = "none";
+        });
+    })();
+
     {% if request.user.is_authenticated and request.user.association_admin %}
     // Association admins must not see Members module links.
     (function hideMembersLinksForAssociationAdmin() {
@@ -232,21 +303,19 @@
     })();
     
     {% if request.user.is_authenticated and request.user.dean %}
-<script>
-  // Hide add buttons + inline add rows for dean everywhere
-  const selectors = [
-    ".object-tools .addlink",
-    ".object-tools a[href$='/add/']",
-    "a.addlink",
-    ".add-row",
-    ".submit-row input[name='_addanother']",
-    ".submit-row input[name='_continue']"
-  ];
-  selectors.forEach(sel => {
-    document.querySelectorAll(sel).forEach(el => el.style.display = "none");
-  });
-</script>
-{% endif %}
+    // Hide add buttons + inline add rows for dean everywhere
+    const selectors = [
+      ".object-tools .addlink",
+      ".object-tools a[href$='/add/']",
+      "a.addlink",
+      ".add-row",
+      ".submit-row input[name='_addanother']",
+      ".submit-row input[name='_continue']"
+    ];
+    selectors.forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => el.style.display = "none");
+    });
+    {% endif %}
 
 </script>
 {% endblock %}

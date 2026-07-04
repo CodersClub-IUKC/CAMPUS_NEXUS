@@ -15,6 +15,9 @@ db.sqlite3
 media/
 staticfiles/
 static/
+!campus_nexus/static/
+!campus_nexus/static/img/
+!campus_nexus/static/img/pwa-icon-*.png
 __pycache__/
 *.pyc
 

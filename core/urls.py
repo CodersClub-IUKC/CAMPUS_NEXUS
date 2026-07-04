@@ -22,12 +22,16 @@ from django.conf import settings
 from django.conf.urls.static import static
 from core.settings import common
 from django.views.generic import RedirectView
+from core import views as core_views
 
 from campus_nexus.forms import StaffPasswordResetForm
 from campus_nexus import admin_views as campus_admin_views
 
 urlpatterns = [
     path("", RedirectView.as_view(pattern_name="admin:index", permanent=False), name="home"),
+    path("manifest.webmanifest", core_views.webmanifest, name="webmanifest"),
+    path("service-worker.js", core_views.service_worker, name="service_worker"),
+    path("offline/", core_views.offline, name="offline"),
     path(
         "favicon.ico",
         RedirectView.as_view(url="/static/img/favicon.ico", permanent=True),
