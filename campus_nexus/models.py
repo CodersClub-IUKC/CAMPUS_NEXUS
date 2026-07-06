@@ -1,3 +1,5 @@
+import hashlib
+
 from django.db import models
 from django.utils import timezone
 from django.core.validators import RegexValidator
@@ -126,7 +128,8 @@ class Association(models.Model):
             css_content = get_association_theme(self)
 
             if isinstance(css_content, str) and css_content.strip():
-                file_name = f"association_{self.id}.css"
+                css_hash = hashlib.sha256(css_content.encode("utf-8")).hexdigest()[:12]
+                file_name = f"association_{self.id}_{css_hash}.css"
 
                 # Remove prior theme file to avoid orphaned versions
                 if self.theme_css_file and self.theme_css_file.name:

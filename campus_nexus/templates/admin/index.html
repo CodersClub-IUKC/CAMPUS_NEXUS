@@ -1140,6 +1140,10 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script>
     Chart.defaults.maintainAspectRatio = false;
+    const assocThemeStyle = getComputedStyle(document.documentElement);
+    const assocPrimary = assocThemeStyle.getPropertyValue("--bs-primary").trim() || "#198754";
+    const assocPrimaryRgb = assocThemeStyle.getPropertyValue("--bs-primary-rgb").trim() || "25,135,84";
+    const assocDanger = assocThemeStyle.getPropertyValue("--bs-danger").trim() || "#dc3545";
     new Chart(document.getElementById("trendChart"), {
       type: "bar",
       data: {
@@ -1148,7 +1152,7 @@
           {
             label: "Income",
             data: {{ a.monthly_trend.income|safe }},
-            backgroundColor: "rgba(25,135,84,0.7)",
+            backgroundColor: `rgba(${assocPrimaryRgb},0.7)`,
             borderRadius: 3,
           },
           {
@@ -1184,7 +1188,7 @@
             parseFloat("{{ a.finance.total_collected|default_if_none:'0' }}") || 0,
             parseFloat("{{ a.finance.total_expenses|default_if_none:'0' }}") || 0,
           ],
-          backgroundColor: ["#198754", "#dc3545"],
+          backgroundColor: [assocPrimary, assocDanger],
           borderWidth: 1,
         }]
       },
