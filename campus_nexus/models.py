@@ -11,13 +11,17 @@ from django.conf import settings
 from django.core.files.storage import default_storage
 from .countries import COUNTRY_CHOICES
 try:
-    from .theme_utils import get_association_theme
+    from .theme_utils import get_association_theme_data
 except Exception:
-    def get_association_theme(association):
+    def get_association_theme_data(association):
 
         name = getattr(association, "name", "association")
         # Minimal default CSS; adjust as needed.
-        return "/* default theme for {} */\n:root {{ --association-name: \"{}\"; }}\n".format(name, name)
+        return {
+            "primary_color": "",
+            "secondary_color": "",
+            "css": "/* default theme for {} */\n:root {{ --association-name: \"{}\"; }}\n".format(name, name),
+        }
 
 
 User = get_user_model()
@@ -107,6 +111,9 @@ class Association(models.Model):
     description = models.TextField(blank=True)
     logo_image = models.ImageField(upload_to='associations/logos/', blank=True, null=True)
     theme_css_file = models.FileField(upload_to="associations/themes/", blank=True, null=True, editable=False)
+    theme_primary_color = models.CharField(max_length=7, blank=True, default="", editable=False)
+    theme_secondary_color = models.CharField(max_length=7, blank=True, default="", editable=False)
+    theme_version = models.CharField(max_length=12, blank=True, default="", editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -123,9 +130,10 @@ class Association(models.Model):
         # First save normally
         super().save(*args, **kwargs)
 
-        # If logo changed, generate CSS WITHOUT triggering model save again
+        # If logo changed, generate association-specific CSS WITHOUT triggering model save again.
         if logo_changed and self.logo_image:
-            css_content = get_association_theme(self)
+            theme_data = get_association_theme_data(self)
+            css_content = theme_data.get("css") if isinstance(theme_data, dict) else None
 
             if isinstance(css_content, str) and css_content.strip():
                 css_hash = hashlib.sha256(css_content.encode("utf-8")).hexdigest()[:12]
@@ -147,8 +155,24 @@ class Association(models.Model):
 
                 # Update DB directly without recursion
                 Association.objects.filter(pk=self.pk).update(
-                    theme_css_file=self.theme_css_file.name
+                    theme_css_file=self.theme_css_file.name,
+                    theme_primary_color=theme_data.get("primary_color", ""),
+                    theme_secondary_color=theme_data.get("secondary_color", ""),
+                    theme_version=css_hash,
                 )
+        elif logo_changed:
+            if self.theme_css_file and self.theme_css_file.name:
+                try:
+                    default_storage.delete(self.theme_css_file.name)
+                except Exception:
+                    pass
+
+            Association.objects.filter(pk=self.pk).update(
+                theme_css_file="",
+                theme_primary_color="",
+                theme_secondary_color="",
+                theme_version="",
+            )
 
 
     def __str__(self):

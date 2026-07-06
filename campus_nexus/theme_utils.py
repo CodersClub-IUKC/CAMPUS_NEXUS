@@ -53,6 +53,10 @@ def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
     return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))  # type: ignore
 
 
+def _hex_to_rgb_csv(hex_color: str) -> str:
+    return ", ".join(str(channel) for channel in _hex_to_rgb(hex_color))
+
+
 def _sanitize_hex(hex_color: Optional[str], fallback: str) -> str:
     """
     Ensure we always return a valid #RRGGBB string.
@@ -331,12 +335,51 @@ def generate_complete_palette(primary_hex: str, secondary_hex: str) -> Palette:
     )
 
 
-def get_association_theme(association) -> Optional[str]:
+def render_theme_variables_css(primary_hex: str, secondary_hex: str) -> str:
     """
-    Returns compiled CSS for this association or None (never raises).
+    Render runtime-safe CSS variables for one association.
+
+    This intentionally does not compile or mutate tracked static CSS. The shared
+    admin stylesheet consumes these variables, while this generated file lives in
+    media and can change per association.
+    """
+    primary_hex = _sanitize_hex(primary_hex, "#3b82f6")
+    secondary_hex = _sanitize_hex(secondary_hex, "#64748b")
+    palette = generate_complete_palette(primary_hex, secondary_hex)
+
+    return "\n".join(
+        [
+            "/* Generated association theme variables. Do not edit by hand. */",
+            ":root {",
+            f"  --bs-primary: {primary_hex};",
+            f"  --bs-primary-rgb: {_hex_to_rgb_csv(primary_hex)};",
+            f"  --bs-info: {secondary_hex};",
+            f"  --bs-info-rgb: {_hex_to_rgb_csv(secondary_hex)};",
+            f"  --cnx-primary: {primary_hex};",
+            f"  --cnx-accent: {secondary_hex};",
+            f"  --cnx-primary-rgb: {_hex_to_rgb_csv(primary_hex)};",
+            f"  --cnx-accent-rgb: {_hex_to_rgb_csv(secondary_hex)};",
+            f"  --cnx-primary-50: {palette['primary']['shade_50']};",
+            f"  --cnx-primary-100: {palette['primary']['shade_100']};",
+            f"  --cnx-primary-200: {palette['primary']['shade_200']};",
+            f"  --cnx-primary-500: {palette['primary']['shade_500']};",
+            f"  --cnx-primary-600: {palette['primary']['shade_600']};",
+            f"  --cnx-primary-700: {palette['primary']['shade_700']};",
+            f"  --cnx-primary-800: {palette['primary']['shade_800']};",
+            f"  --cnx-primary-900: {palette['primary']['shade_900']};",
+            f"  --cnx-secondary-500: {palette['secondary']['shade_500']};",
+            "}",
+            "",
+        ]
+    )
+
+
+def get_association_theme_data(association) -> Optional[dict[str, str]]:
+    """
+    Return extracted theme colors and generated CSS variables for an association.
     """
     if not getattr(association, "logo_image", None):
-        return None  # fall back to default theme
+        return None
 
     fallback = getattr(settings, "ASSOCIATION_DEFAULT_THEME", ("#3b82f6", "#64748b"))
 
@@ -350,16 +393,25 @@ def get_association_theme(association) -> Optional[str]:
     except Exception as e:
         logger.error("Theme generation failed while reading logo (using fallback): %s", e)
         primary_color, secondary_color = _sanitize_hex(fallback[0], "#3b82f6"), _sanitize_hex(fallback[1], "#64748b")
+    finally:
+        if logo_is_temp and logo_path:
+            try:
+                logo_path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
-    palette = generate_complete_palette(primary_color, secondary_color)
+    return {
+        "primary_color": primary_color,
+        "secondary_color": secondary_color,
+        "css": render_theme_variables_css(primary_color, secondary_color),
+    }
 
-    css = build_association_theme(palette)
 
-    # Clean temp logo file if created from storage
-    if logo_is_temp and logo_path:
-        try:
-            logo_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-
-    return css
+def get_association_theme(association) -> Optional[str]:
+    """
+    Returns compiled CSS for this association or None (never raises).
+    """
+    theme_data = get_association_theme_data(association)
+    if not theme_data:
+        return None
+    return theme_data["css"]
