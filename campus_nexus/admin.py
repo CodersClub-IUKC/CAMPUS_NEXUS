@@ -2097,7 +2097,39 @@ _original_get_urls = admin.site.get_urls
 
 def _custom_get_urls():
     urls = _original_get_urls()
+    from .admin_views import (
+        import_export_centre,
+        import_export_export,
+        import_export_preview,
+        import_export_template,
+        import_export_upload,
+    )
     custom = [
+        path(
+            "import-export/",
+            admin.site.admin_view(import_export_centre),
+            name="import_export_centre",
+        ),
+        path(
+            "import-export/<str:module_key>/import/",
+            admin.site.admin_view(import_export_upload),
+            name="import_export_upload",
+        ),
+        path(
+            "import-export/<str:module_key>/preview/",
+            admin.site.admin_view(import_export_preview),
+            name="import_export_preview",
+        ),
+        path(
+            "import-export/<str:module_key>/export/<str:file_type>/",
+            admin.site.admin_view(import_export_export),
+            name="import_export_export",
+        ),
+        path(
+            "import-export/<str:module_key>/template/<str:file_type>/",
+            admin.site.admin_view(import_export_template),
+            name="import_export_template",
+        ),
         path(
             "submit-feedback/",
             admin.site.admin_view(submit_feedback_view),

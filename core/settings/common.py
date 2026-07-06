@@ -144,6 +144,7 @@ JAZZMIN_SETTINGS = {
         {},
         {"model": "auth.User"},
         {"app": "campus_nexus"},
+        {"name": "Import & Export", "url": "admin:import_export_centre", "icon": "fas fa-file-import"},
         {"name": "Submit Feedback", "url": "admin:submit_feedback", "icon": "fas fa-bug"},
 
     ],
@@ -241,6 +242,12 @@ JAZZMIN_SETTINGS = {
                 "url": "billing_dashboard",
                 "icon": "fas fa-chart-pie",
                 "permissions": ["campus_nexus.view_bill"],
+            },
+            {
+                "name": "Import & Export Centre",
+                "url": "admin:import_export_centre",
+                "icon": "fas fa-file-import",
+                "permissions": ["campus_nexus.view_membership"],
             }
         ]
     },

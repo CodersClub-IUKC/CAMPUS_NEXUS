@@ -28,27 +28,13 @@
 
       <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
         <div class="card border-0 shadow-sm h-100">
-          <div class="card-body d-flex align-items-center gap-3">
-            <div class="rounded-circle d-flex align-items-center justify-content-center bg-primary bg-opacity-10" style="width:48px;height:48px;flex-shrink:0;">
-              <i class="fas fa-user-friends text-primary"></i>
+          <div class="card-body cnx-stat-card">
+            <div class="cnx-stat-icon bg-primary">
+              <i class="fas fa-users" aria-hidden="true"></i>
             </div>
-            <div>
-              <div class="text-muted small">Total Members</div>
-              <div class="fw-bold fs-4">{{ su.total_members|intcomma }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
-        <div class="card border-0 shadow-sm h-100">
-          <div class="card-body d-flex align-items-center gap-3">
-            <div class="rounded-circle d-flex align-items-center justify-content-center bg-info bg-opacity-10" style="width:48px;height:48px;flex-shrink:0;">
-              <i class="fas fa-university text-info"></i>
-            </div>
-            <div>
-              <div class="text-muted small">Associations</div>
-              <div class="fw-bold fs-4">{{ su.total_associations }}</div>
+            <div class="cnx-stat-content">
+              <span class="cnx-stat-label">Total Members</span>
+              <strong class="cnx-stat-value">{{ su.total_members|intcomma }}</strong>
             </div>
           </div>
         </div>
@@ -56,27 +42,13 @@
 
       <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
         <div class="card border-0 shadow-sm h-100">
-          <div class="card-body d-flex align-items-center gap-3">
-            <div class="rounded-circle d-flex align-items-center justify-content-center bg-success bg-opacity-10" style="width:48px;height:48px;flex-shrink:0;">
-              <i class="fas fa-id-card text-success"></i>
+          <div class="card-body cnx-stat-card">
+            <div class="cnx-stat-icon bg-info">
+              <i class="fas fa-building" aria-hidden="true"></i>
             </div>
-            <div>
-              <div class="text-muted small">Active Memberships</div>
-              <div class="fw-bold fs-4">{{ su.active_memberships|intcomma }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
-        <div class="card border-0 shadow-sm h-100">
-          <div class="card-body d-flex align-items-center gap-3">
-            <div class="rounded-circle d-flex align-items-center justify-content-center bg-success bg-opacity-10" style="width:48px;height:48px;flex-shrink:0;">
-              <i class="fas fa-credit-card text-success"></i>
-            </div>
-            <div>
-              <div class="text-muted small">Total Collected</div>
-              <div class="fw-bold" style="font-size:1rem;">UGX {{ su.total_collected|floatformat:0|intcomma }}</div>
+            <div class="cnx-stat-content">
+              <span class="cnx-stat-label">Associations</span>
+              <strong class="cnx-stat-value">{{ su.total_associations }}</strong>
             </div>
           </div>
         </div>
@@ -84,13 +56,41 @@
 
       <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
         <div class="card border-0 shadow-sm h-100">
-          <div class="card-body d-flex align-items-center gap-3">
-            <div class="rounded-circle d-flex align-items-center justify-content-center bg-warning bg-opacity-10" style="width:48px;height:48px;flex-shrink:0;">
-              <i class="fas fa-receipt text-warning"></i>
+          <div class="card-body cnx-stat-card">
+            <div class="cnx-stat-icon bg-success">
+              <i class="fas fa-user-check" aria-hidden="true"></i>
             </div>
-            <div>
-              <div class="text-muted small">Total Expenses</div>
-              <div class="fw-bold" style="font-size:1rem;">UGX {{ su.total_expenses|floatformat:0|intcomma }}</div>
+            <div class="cnx-stat-content">
+              <span class="cnx-stat-label">Active Memberships</span>
+              <strong class="cnx-stat-value">{{ su.active_memberships|intcomma }}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body cnx-stat-card">
+            <div class="cnx-stat-icon bg-success">
+              <i class="fas fa-money-bill-wave" aria-hidden="true"></i>
+            </div>
+            <div class="cnx-stat-content">
+              <span class="cnx-stat-label">Total Collected</span>
+              <strong class="cnx-stat-value cnx-stat-value-money">UGX {{ su.total_collected|floatformat:0|intcomma }}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body cnx-stat-card">
+            <div class="cnx-stat-icon bg-warning">
+              <i class="fas fa-receipt" aria-hidden="true"></i>
+            </div>
+            <div class="cnx-stat-content">
+              <span class="cnx-stat-label">Total Expenses</span>
+              <strong class="cnx-stat-value cnx-stat-value-money">UGX {{ su.total_expenses|floatformat:0|intcomma }}</strong>
             </div>
           </div>
         </div>
@@ -98,13 +98,13 @@
 
       <div class="col-xl-2 col-lg-4 col-md-6 col-sm-12">
         <div class="card border-0 shadow-sm h-100 {% if su.overdue_count > 0 %}border-danger border-start border-3{% endif %}">
-          <div class="card-body d-flex align-items-center gap-3">
-            <div class="rounded-circle d-flex align-items-center justify-content-center {% if su.overdue_count > 0 %}bg-danger bg-opacity-10{% else %}bg-secondary bg-opacity-10{% endif %}" style="width:48px;height:48px;flex-shrink:0;">
-              <i class="fas fa-exclamation-circle {% if su.overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %}"></i>
+          <div class="card-body cnx-stat-card">
+            <div class="cnx-stat-icon {% if su.overdue_count > 0 %}bg-danger{% else %}bg-secondary{% endif %}">
+              <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
             </div>
-            <div>
-              <div class="text-muted small">Overdue Charges</div>
-              <div class="fw-bold fs-4 {% if su.overdue_count > 0 %}text-danger{% endif %}">{{ su.overdue_count }}</div>
+            <div class="cnx-stat-content">
+              <span class="cnx-stat-label">Overdue Charges</span>
+              <strong class="cnx-stat-value {% if su.overdue_count > 0 %}text-danger{% endif %}">{{ su.overdue_count }}</strong>
             </div>
           </div>
         </div>

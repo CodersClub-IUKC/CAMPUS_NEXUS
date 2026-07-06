@@ -1,0 +1,77 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <h3 class="mb-1">{{ title }}</h3>
+        <div class="text-muted">{{ preview.file_name }} · {{ preview.file_type }} · {{ preview.module_label }}</div>
+      </div>
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'admin:import_export_centre' %}">
+        <i class="fas fa-arrow-left"></i> Centre
+      </a>
+    </div>
+  </div>
+
+  <div class="row mb-3">
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-2"><div class="card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Rows</div><strong>{{ preview.counts.total }}</strong></div></div></div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-2"><div class="card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Valid</div><strong>{{ preview.counts.valid }}</strong></div></div></div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-2"><div class="card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Invalid</div><strong>{{ preview.counts.invalid }}</strong></div></div></div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-2"><div class="card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Duplicate</div><strong>{{ preview.counts.duplicates }}</strong></div></div></div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-2"><div class="card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Create</div><strong>{{ preview.counts.creates }}</strong></div></div></div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-2"><div class="card border-0 shadow-sm"><div class="card-body"><div class="text-muted small">Update</div><strong>{{ preview.counts.updates }}</strong></div></div></div>
+  </div>
+
+  {% if preview.unknown_headers %}
+    <div class="alert alert-info">Ignored unsupported column(s): {{ preview.unknown_headers|join:", " }}</div>
+  {% endif %}
+
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Row</th>
+            <th>Data</th>
+            <th>Status</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in preview.rows %}
+            <tr>
+              <td>{{ row.row_number }}</td>
+              <td><code>{{ row.data }}</code></td>
+              <td>
+                {% if row.status == "CREATE" %}
+                  <span class="badge badge-success">Create</span>
+                {% elif row.status == "UPDATE" %}
+                  <span class="badge badge-info">Update</span>
+                {% elif row.status == "DUPLICATE" %}
+                  <span class="badge badge-warning">Duplicate</span>
+                {% else %}
+                  <span class="badge badge-danger">Invalid</span>
+                {% endif %}
+              </td>
+              <td>{{ row.error|default:"-" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer bg-white">
+      <form method="post" class="d-flex gap-2">
+        {% csrf_token %}
+        <button class="btn btn-primary" type="submit" {% if preview.counts.valid == 0 %}disabled{% endif %}>
+          <i class="fas fa-check"></i> Confirm Import
+        </button>
+        <button class="btn btn-outline-secondary" type="submit" name="cancel" value="1">
+          <i class="fas fa-times"></i> Cancel Import
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

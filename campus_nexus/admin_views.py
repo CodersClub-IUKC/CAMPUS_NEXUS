@@ -1,4 +1,5 @@
 from django.contrib.admin.views.decorators import staff_member_required
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import render, redirect
 from django.http import HttpResponseForbidden, JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -6,6 +7,17 @@ from django.contrib import admin as dj_admin, messages
 from django.utils import timezone
 from django.db.models import Sum, Count, Q
 from .models import Bill, BillMembership, Membership, Association, BillableItem
+from .services.import_export.centre import (
+    ImportExportError,
+    build_preview,
+    commit_preview,
+    export_csv_response,
+    export_excel_response,
+    get_spec,
+    modules_for_request,
+    preview_from_session,
+    preview_to_session,
+)
 
 def _admin_ctx(request):
     """Return the full Django admin context needed to render the sidebar/navigation."""
@@ -205,3 +217,118 @@ def billing_dashboard(request, association_id=None):
     }
     
     return render(request, 'admin/billing_dashboard.html', context)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def import_export_centre(request):
+    context = {
+        **_admin_ctx(request),
+        "title": "Import & Export Centre",
+        "sections": modules_for_request(request),
+    }
+    return render(request, "admin/import_export/centre.html", context)
+
+
+@staff_member_required
+@require_http_methods(["GET", "POST"])
+def import_export_upload(request, module_key):
+    try:
+        spec = get_spec(module_key)
+    except ImportExportError:
+        return HttpResponseForbidden("Unsupported module")
+
+    if request.method == "POST":
+        uploaded_file = request.FILES.get("file")
+        mode = request.POST.get("mode") or "create"
+        if not uploaded_file:
+            messages.error(request, "Choose a CSV or Excel file to import.")
+        else:
+            try:
+                preview = build_preview(request, module_key, uploaded_file, mode)
+            except PermissionDenied:
+                return HttpResponseForbidden("Access denied")
+            except ImportExportError as exc:
+                messages.error(request, str(exc))
+            except Exception as exc:
+                messages.error(request, f"Import validation failed: {exc}")
+            else:
+                request.session[f"import_preview:{module_key}"] = preview_to_session(preview)
+                return redirect("admin:import_export_preview", module_key=module_key)
+
+    context = {
+        **_admin_ctx(request),
+        "title": f"Import {spec.label}",
+        "spec": spec,
+    }
+    return render(request, "admin/import_export/upload.html", context)
+
+
+@staff_member_required
+@require_http_methods(["GET", "POST"])
+def import_export_preview(request, module_key):
+    session_key = f"import_preview:{module_key}"
+    value = request.session.get(session_key)
+    if not value:
+        messages.warning(request, "No pending import preview was found.")
+        return redirect("admin:import_export_centre")
+
+    preview = preview_from_session(value)
+    if request.method == "POST":
+        if "cancel" in request.POST:
+            request.session.pop(session_key, None)
+            messages.info(request, "Import cancelled.")
+            return redirect("admin:import_export_centre")
+        try:
+            summary = commit_preview(request, preview)
+        except PermissionDenied:
+            return HttpResponseForbidden("Access denied")
+        except Exception as exc:
+            messages.error(request, f"Import failed and was rolled back: {exc}")
+        else:
+            request.session.pop(session_key, None)
+            messages.success(
+                request,
+                "Import complete. "
+                f"Created: {summary['created']}. Updated: {summary['updated']}. Skipped: {summary['skipped']}.",
+            )
+            return redirect("admin:import_export_centre")
+
+    context = {
+        **_admin_ctx(request),
+        "title": f"Preview {preview['module_label']} Import",
+        "preview": preview,
+    }
+    return render(request, "admin/import_export/preview.html", context)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def import_export_export(request, module_key, file_type):
+    try:
+        if file_type == "csv":
+            return export_csv_response(request, module_key)
+        if file_type == "xlsx":
+            return export_excel_response(request, module_key)
+    except PermissionDenied:
+        return HttpResponseForbidden("Access denied")
+    except ImportExportError as exc:
+        messages.error(request, str(exc))
+        return redirect("admin:import_export_centre")
+    return HttpResponseForbidden("Unsupported export type")
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def import_export_template(request, module_key, file_type):
+    try:
+        if file_type == "csv":
+            return export_csv_response(request, module_key, template=True)
+        if file_type == "xlsx":
+            return export_excel_response(request, module_key, template=True)
+    except PermissionDenied:
+        return HttpResponseForbidden("Access denied")
+    except ImportExportError as exc:
+        messages.error(request, str(exc))
+        return redirect("admin:import_export_centre")
+    return HttpResponseForbidden("Unsupported template type")

@@ -1,13 +1,16 @@
 import csv
 from pathlib import Path
+from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from campus_nexus.countries import COUNTRY_LOOKUP
 from campus_nexus.models import Course, Faculty, Member
+from campus_nexus.services.import_export.centre import build_preview, commit_preview
 
 
 class Command(BaseCommand):
@@ -68,6 +71,10 @@ class Command(BaseCommand):
         default_course_duration_years = int(options["default_course_duration_years"])
         dry_run = bool(options["dry_run"])
 
+        if not create_missing_relations:
+            self._handle_with_shared_import_service(csv_path, created_by, dry_run)
+            return
+
         created_count = 0
         updated_count = 0
         skipped_count = 0
@@ -124,6 +131,47 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("Skipped row details:"))
             for message in failure_messages:
                 self.stdout.write(f" - {message}")
+
+    def _handle_with_shared_import_service(self, csv_path, created_by, dry_run):
+        user = created_by or SimpleNamespace(
+            is_superuser=True,
+            is_authenticated=False,
+            pk=None,
+        )
+        request = SimpleNamespace(
+            user=user,
+            session={},
+            is_management_command=True,
+        )
+        upload = SimpleUploadedFile(
+            csv_path.name,
+            csv_path.read_bytes(),
+            content_type="text/csv",
+        )
+        try:
+            preview = build_preview(request, "members", upload, "upsert")
+        except Exception as exc:
+            raise CommandError(str(exc)) from exc
+
+        with transaction.atomic():
+            try:
+                summary = commit_preview(request, preview)
+            except Exception as exc:
+                raise CommandError(str(exc)) from exc
+            if dry_run:
+                transaction.set_rollback(True)
+
+        mode = "DRY-RUN" if dry_run else "COMMITTED"
+        self.stdout.write(self.style.SUCCESS(f"{mode} import summary"))
+        self.stdout.write(f"Created: {summary['created']}")
+        self.stdout.write(f"Updated: {summary['updated']}")
+        self.stdout.write(f"Skipped: {summary['skipped']}")
+
+        failures = [row for row in preview["rows"] if row["status"] in {"INVALID", "DUPLICATE"}]
+        if failures:
+            self.stdout.write(self.style.WARNING("Skipped row details:"))
+            for row in failures:
+                self.stdout.write(f" - Line {row['row_number']}: {row['error'] or row['status']}")
 
     def _resolve_created_by(self, username):
         if not username:
@@ -250,4 +298,3 @@ class Command(BaseCommand):
         if not value:
             return ""
         return COUNTRY_LOOKUP.get(value.lower(), "")
-

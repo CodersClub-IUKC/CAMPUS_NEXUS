@@ -1,0 +1,69 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div>
+        <h3 class="mb-1">Import & Export Centre</h3>
+        <div class="text-muted">Bulk data tools respect your current admin permissions and association scope.</div>
+      </div>
+      <i class="fas fa-file-import fa-2x text-primary"></i>
+    </div>
+  </div>
+
+  {% for section, modules in sections.items %}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white">
+        <strong>{{ section }}</strong>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+          <thead>
+            <tr>
+              <th>Module</th>
+              <th style="width: 58%;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for module in modules %}
+              <tr>
+                <td>
+                  <strong>{{ module.label }}</strong>
+                  {% if module.system_generated %}
+                    <span class="badge badge-secondary ml-2">System generated</span>
+                  {% endif %}
+                </td>
+                <td class="d-flex flex-wrap gap-2">
+                  {% if module.importable %}
+                    <a class="btn btn-sm btn-primary" href="{% url 'admin:import_export_upload' module.key %}">
+                      <i class="fas fa-upload"></i> Import CSV / Excel
+                    </a>
+                  {% endif %}
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:import_export_export' module.key 'csv' %}">
+                    <i class="fas fa-file-csv"></i> Export CSV
+                  </a>
+                  <a class="btn btn-sm btn-outline-success" href="{% url 'admin:import_export_export' module.key 'xlsx' %}">
+                    <i class="fas fa-file-excel"></i> Export Excel
+                  </a>
+                  {% if module.importable %}
+                    <a class="btn btn-sm btn-outline-secondary" href="{% url 'admin:import_export_template' module.key 'csv' %}">
+                      <i class="fas fa-download"></i> CSV Template
+                    </a>
+                    <a class="btn btn-sm btn-outline-secondary" href="{% url 'admin:import_export_template' module.key 'xlsx' %}">
+                      <i class="fas fa-download"></i> Excel Template
+                    </a>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% empty %}
+    <div class="alert alert-warning">No import/export modules are available for your account.</div>
+  {% endfor %}
+</div>
+{% endblock %}
+
