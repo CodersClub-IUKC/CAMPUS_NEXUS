@@ -790,7 +790,7 @@ body.jazzmin-login-page #lockout-note {
     background: linear-gradient(90deg, var(--cnx-primary), var(--cnx-accent));
 }
 
-.cnx-rate-display strong {
+.cnx-rate-value {
     display: block;
     color: var(--cnx-primary);
     font-size: 2rem;
@@ -798,13 +798,27 @@ body.jazzmin-login-page #lockout-note {
     line-height: 1;
 }
 
-.cnx-rate-display span {
+.cnx-rate-caption {
     display: block;
     margin-top: 0.55rem;
     color: var(--cnx-muted);
     font-size: 0.78rem;
     font-weight: 800;
     line-height: 1.35;
+}
+
+.cnx-status-grid-compact {
+    grid-template-columns: 1fr;
+}
+
+.cnx-status-grid-compact span {
+    min-height: 42px;
+}
+
+.cnx-status-grid-compact b {
+    display: inline-block;
+    min-width: 2.5rem;
+    margin-right: 0.35rem;
 }
 
 .cnx-dashboard-executive .cnx-audit-strip-compact {

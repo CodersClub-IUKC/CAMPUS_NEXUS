@@ -14,8 +14,8 @@
       </div>
     </div>
     <div class="cnx-hero-actions">
-      <a class="btn btn-sm btn-light" href="{{ request.path }}"><i class="fas fa-sync-alt me-1"></i>Refresh</a>
-      <a class="btn btn-sm btn-primary" href="{% url 'admin:campus_nexus_payment_add' %}"><i class="fas fa-credit-card me-1"></i>Record Payment</a>
+      <a class="btn btn-sm btn-light" href="{{ request.path }}"><i class="fas fa-sync-alt mr-1"></i>Refresh</a>
+      <a class="btn btn-sm btn-primary" href="{% url 'admin:campus_nexus_payment_add' %}"><i class="fas fa-credit-card mr-1"></i>Record Payment</a>
     </div>
   </div>
 
@@ -80,8 +80,8 @@
           </div>
         </div>
         <div class="cnx-rate-display">
-          <strong>{{ a.finance.collection_rate }}%</strong>
-          <span>UGX {{ a.finance.total_collected|floatformat:0|intcomma }} of UGX {{ a.finance.total_billed|floatformat:0|intcomma }}</span>
+          <div class="cnx-rate-value">{{ a.finance.collection_rate }}%</div>
+          <div class="cnx-rate-caption">UGX {{ a.finance.total_collected|floatformat:0|intcomma }} of UGX {{ a.finance.total_billed|floatformat:0|intcomma }}</div>
         </div>
         <div class="cnx-progress-stack mt-3">
           <span style="width:{{ a.finance.collection_rate }}%"></span>
@@ -96,10 +96,10 @@
             <p>Current association membership state.</p>
           </div>
         </div>
-        <div class="cnx-metric-list">
-          <div class="cnx-metric-row"><span>Active</span><strong>{{ a.membership_status.active|default:0 }}</strong><small>members</small></div>
-          <div class="cnx-metric-row"><span>Inactive</span><strong>{{ a.membership_status.inactive|default:0 }}</strong><small>members</small></div>
-          <div class="cnx-metric-row"><span>Suspended</span><strong>{{ a.membership_status.suspended|default:0 }}</strong><small>members</small></div>
+        <div class="cnx-status-grid cnx-status-grid-compact">
+          <span><b>{{ a.membership_status.active|default:0 }}</b> Active</span>
+          <span><b>{{ a.membership_status.inactive|default:0 }}</b> Inactive</span>
+          <span><b>{{ a.membership_status.suspended|default:0 }}</b> Suspended</span>
         </div>
       </section>
     </div>
