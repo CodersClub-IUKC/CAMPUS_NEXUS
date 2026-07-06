@@ -894,6 +894,52 @@ body.jazzmin-login-page #lockout-note {
     background-color: rgba(var(--cnx-accent-rgb), 0.06);
 }
 
+/* Association runtime theme hooks for Jazzmin/AdminLTE chrome */
+body:has(.cnx-dashboard-association) #jazzy-sidebar.main-sidebar,
+body:has(.cnx-dashboard-association) #jazzy-sidebar.main-sidebar::before,
+body:has(.cnx-dashboard-association) .main-sidebar.sidebar-dark-primary {
+    background:
+        linear-gradient(180deg, var(--cnx-primary-900, #1f2937) 0%, var(--cnx-primary-800, #27313d) 48%, var(--cnx-primary-700, #334155) 100%) !important;
+}
+
+body:has(.cnx-dashboard-association) #jazzy-sidebar .brand-link,
+body:has(.cnx-dashboard-association).layout-navbar-fixed .wrapper .sidebar-dark-primary .brand-link:not([class*=navbar]) {
+    border-bottom-color: rgba(255, 255, 255, 0.14) !important;
+    background: var(--cnx-primary-900, #1f2937) !important;
+}
+
+body:has(.cnx-dashboard-association) #jazzy-sidebar .user-panel {
+    border-bottom-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+body:has(.cnx-dashboard-association) #jazzy-sidebar .nav-header,
+body:has(.cnx-dashboard-association) #jazzy-sidebar .brand-text,
+body:has(.cnx-dashboard-association) #jazzy-sidebar .user-panel .info,
+body:has(.cnx-dashboard-association) #jazzy-sidebar .user-panel .info a,
+body:has(.cnx-dashboard-association) #jazzy-sidebar .nav-sidebar .nav-link,
+body:has(.cnx-dashboard-association) #jazzy-sidebar .nav-sidebar .nav-link p,
+body:has(.cnx-dashboard-association) #jazzy-sidebar .nav-sidebar .nav-icon {
+    color: rgba(255, 255, 255, 0.82) !important;
+}
+
+body:has(.cnx-dashboard-association) #jazzy-sidebar .nav-sidebar .nav-link:hover {
+    color: #ffffff !important;
+    background: rgba(var(--cnx-accent-rgb, 255, 255, 255), 0.14) !important;
+}
+
+body:has(.cnx-dashboard-association) #jazzy-sidebar .nav-sidebar>.nav-item>.nav-link.active,
+body:has(.cnx-dashboard-association) .sidebar-dark-primary .nav-sidebar>.nav-item>.nav-link.active,
+body:has(.cnx-dashboard-association) .sidebar-light-primary .nav-sidebar>.nav-item>.nav-link.active {
+    color: #ffffff !important;
+    background: linear-gradient(135deg, var(--cnx-primary, #0d6efd), var(--cnx-accent, #20c997)) !important;
+    box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.5);
+}
+
+body:has(.cnx-dashboard-association) #jazzy-sidebar .nav-sidebar>.nav-item>.nav-link.active .nav-icon,
+body:has(.cnx-dashboard-association) #jazzy-sidebar .nav-sidebar>.nav-item>.nav-link.active p {
+    color: #ffffff !important;
+}
+
 @media (max-width: 767.98px) {
     .cnx-dashboard {
         padding-left: 0.35rem;
