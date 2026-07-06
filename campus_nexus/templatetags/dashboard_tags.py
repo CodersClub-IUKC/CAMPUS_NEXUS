@@ -11,6 +11,7 @@ from django.utils import timezone
 from campus_nexus.models import (
     Announcement,
     Association,
+    AuditLog,
     Charge,
     Expense,
     Event,
@@ -61,6 +62,67 @@ def _monthly_trend(association, months=6):
         "labels": _json_list(labels),
         "income": _json_list(income_data),
         "expenses": _json_list(expense_data),
+    }
+
+
+def _system_monthly_finance(months=6):
+    """Returns last `months` months of recorded income and expenses."""
+    today = timezone.localdate()
+    labels, income_data, expense_data = [], [], []
+
+    for i in range(months - 1, -1, -1):
+        anchor = today - relativedelta(months=i)
+        labels.append(anchor.strftime("%b %Y"))
+
+        income = (
+            Payment.objects.filter(
+                status="recorded",
+                paid_at__year=anchor.year,
+                paid_at__month=anchor.month,
+            ).aggregate(total=Sum("amount_paid")).get("total") or ZERO
+        )
+        expense = (
+            Expense.objects.filter(
+                status="recorded",
+                spent_at__year=anchor.year,
+                spent_at__month=anchor.month,
+            ).aggregate(total=Sum("amount")).get("total") or ZERO
+        )
+        income_data.append(float(income))
+        expense_data.append(float(expense))
+
+    return {
+        "labels": _json_list(labels),
+        "income": _json_list(income_data),
+        "expenses": _json_list(expense_data),
+    }
+
+
+def _system_membership_growth(months=6):
+    today = timezone.localdate()
+    labels, members_data, memberships_data = [], [], []
+
+    for i in range(months - 1, -1, -1):
+        anchor = today - relativedelta(months=i)
+        labels.append(anchor.strftime("%b %Y"))
+        members_data.append(
+            Member.objects.filter(
+                created_at__year=anchor.year,
+                created_at__month=anchor.month,
+            ).count()
+        )
+        memberships_data.append(
+            Membership.objects.filter(
+                status="active",
+                joined_at__year=anchor.year,
+                joined_at__month=anchor.month,
+            ).count()
+        )
+
+    return {
+        "labels": _json_list(labels),
+        "members": _json_list(members_data),
+        "memberships": _json_list(memberships_data),
     }
 
 
@@ -360,6 +422,7 @@ def superuser_dashboard_data():
     total_members = Member.objects.count()
     total_associations = Association.objects.count()
     total_memberships = Membership.objects.filter(status="active").count()
+    total_events = Event.objects.count()
 
     total_collected = (
         Payment.objects.filter(status="recorded")
@@ -372,6 +435,25 @@ def superuser_dashboard_data():
     overdue_count = Charge.objects.filter(
         is_overdue=True, status__in=["unpaid", "partial"]
     ).count()
+    this_month = timezone.localdate()
+    members_this_month = Member.objects.filter(
+        created_at__year=this_month.year,
+        created_at__month=this_month.month,
+    ).count()
+    payments_this_month = (
+        Payment.objects.filter(
+            status="recorded",
+            paid_at__year=this_month.year,
+            paid_at__month=this_month.month,
+        ).aggregate(total=Sum("amount_paid")).get("total") or ZERO
+    )
+    expenses_this_month = (
+        Expense.objects.filter(
+            status="recorded",
+            spent_at__year=this_month.year,
+            spent_at__month=this_month.month,
+        ).aggregate(total=Sum("amount")).get("total") or ZERO
+    )
 
     member_type_qs = (
         Member.objects.values("member_type")
@@ -390,13 +472,68 @@ def superuser_dashboard_data():
     top_labels = [r["association__name"] for r in top_assoc_qs]
     top_data = [int(r["total"]) for r in top_assoc_qs]
 
+    charge_status_qs = (
+        Charge.objects.exclude(status="cancelled")
+        .values("status")
+        .annotate(total=Count("id"))
+    )
+    charge_status = {row["status"]: row["total"] for row in charge_status_qs}
+    charge_status_labels = ["Paid", "Partial", "Unpaid", "Overdue"]
+    charge_status_data = [
+        int(charge_status.get("paid", 0)),
+        int(charge_status.get("partial", 0)),
+        int(charge_status.get("unpaid", 0)),
+        int(overdue_count),
+    ]
+
+    recent_payments = (
+        Payment.objects.filter(status="recorded")
+        .select_related("membership__member", "membership__association", "charge")
+        .order_by("-recorded_at")[:5]
+    )
+    recent_expenses = (
+        Expense.objects.filter(status="recorded")
+        .select_related("association", "recorded_by")
+        .order_by("-spent_at", "-recorded_at")[:5]
+    )
+    upcoming_events = (
+        Event.objects.filter(event_date__gte=timezone.now())
+        .select_related("association")
+        .order_by("event_date")[:5]
+    )
+    recent_audit = (
+        AuditLog.objects.select_related("actor", "association")
+        .order_by("-created_at")[:6]
+    )
+    top_association_rows = list(
+        Membership.objects.filter(status="active")
+        .values("association__name")
+        .annotate(total=Count("member_id", distinct=True))
+        .order_by("-total")[:5]
+    )
+
     return {
         "total_members": total_members,
         "total_associations": total_associations,
         "active_memberships": total_memberships,
+        "total_events": total_events,
         "total_collected": total_collected,
         "total_expenses": total_expenses,
         "overdue_count": overdue_count,
+        "members_this_month": members_this_month,
+        "payments_this_month": payments_this_month,
+        "expenses_this_month": expenses_this_month,
+        "net_position": total_collected - total_expenses,
+        "monthly_finance": _system_monthly_finance(months=6),
+        "membership_growth": _system_membership_growth(months=6),
+        "charge_status": {
+            "paid": charge_status.get("paid", 0),
+            "partial": charge_status.get("partial", 0),
+            "unpaid": charge_status.get("unpaid", 0),
+            "overdue": overdue_count,
+            "labels": _json_list(charge_status_labels),
+            "data": _json_list(charge_status_data),
+        },
         "member_type_distribution": {
             "labels": _json_list(type_labels),
             "data": _json_list(type_data),
@@ -405,4 +542,9 @@ def superuser_dashboard_data():
             "labels": _json_list(top_labels),
             "data": _json_list(top_data),
         },
+        "top_association_rows": top_association_rows,
+        "recent_payments": recent_payments,
+        "recent_expenses": recent_expenses,
+        "upcoming_events": upcoming_events,
+        "recent_audit": recent_audit,
     }
