@@ -1,0 +1,417 @@
+{% load humanize %}
+
+<div class="container-fluid cnx-dashboard cnx-dashboard-executive">
+
+  <div class="cnx-dashboard-hero cnx-dashboard-hero-pro mb-4">
+    <div class="cnx-hero-copy">
+      <div class="cnx-eyebrow">Dean Executive Dashboard</div>
+      <h3 class="mb-1">Executive Overview</h3>
+      <div class="text-muted">Institution-wide association, membership, financial and engagement overview.</div>
+      <div class="cnx-hero-meta">
+        <span><i class="far fa-calendar-alt"></i>{% now "M j, Y" %}</span>
+        <span><i class="fas fa-building"></i>{{ d.total_associations }} associations</span>
+        <span><i class="fas fa-chart-line"></i>6-month view</span>
+      </div>
+    </div>
+    <div class="cnx-hero-actions">
+      <a class="btn btn-sm btn-light" href="{{ request.path }}"><i class="fas fa-sync-alt me-1"></i>Refresh</a>
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_association_changelist' %}"><i class="fas fa-university me-1"></i>Associations</a>
+    </div>
+  </div>
+
+  <div class="cnx-kpi-grid mb-4">
+    <div class="cnx-kpi-card cnx-tone-blue">
+      <div class="cnx-kpi-icon"><i class="fas fa-building"></i></div>
+      <div>
+        <span class="cnx-stat-label">Total Associations</span>
+        <strong class="cnx-stat-value">{{ d.total_associations|intcomma }}</strong>
+        <small>{{ d.faculty_based_associations }} faculty-based · {{ d.non_faculty_based_associations }} independent</small>
+      </div>
+    </div>
+    <div class="cnx-kpi-card cnx-tone-slate">
+      <div class="cnx-kpi-icon"><i class="fas fa-users"></i></div>
+      <div>
+        <span class="cnx-stat-label">Total Members</span>
+        <strong class="cnx-stat-value">{{ d.total_members|intcomma }}</strong>
+        <small>{% if d.top_assoc_name %}Top: {{ d.top_assoc_name }} · {{ d.top_assoc_percent }}%{% else %}No membership records yet{% endif %}</small>
+      </div>
+    </div>
+    <div class="cnx-kpi-card cnx-tone-teal">
+      <div class="cnx-kpi-icon"><i class="fas fa-user-check"></i></div>
+      <div>
+        <span class="cnx-stat-label">Active Memberships</span>
+        <strong class="cnx-stat-value">{{ d.membership_status.active|default:0|intcomma }}</strong>
+        <small>{{ d.membership_status.active_percent }}% active · {{ d.membership_status.suspended|default:0 }} suspended</small>
+      </div>
+    </div>
+    <div class="cnx-kpi-card cnx-tone-green">
+      <div class="cnx-kpi-icon"><i class="fas fa-money-bill-wave"></i></div>
+      <div>
+        <span class="cnx-stat-label">Total Collected</span>
+        <strong class="cnx-stat-value cnx-stat-value-money">UGX {{ d.finance.total_collected|floatformat:0|intcomma }}</strong>
+        <small>{{ d.finance.collection_rate }}% of billed amount</small>
+      </div>
+    </div>
+    <div class="cnx-kpi-card cnx-tone-amber">
+      <div class="cnx-kpi-icon"><i class="fas fa-receipt"></i></div>
+      <div>
+        <span class="cnx-stat-label">Total Expenses</span>
+        <strong class="cnx-stat-value cnx-stat-value-money">UGX {{ d.finance.total_expenses|floatformat:0|intcomma }}</strong>
+        <small>Net UGX {{ d.finance.net_position|floatformat:0|intcomma }}</small>
+      </div>
+    </div>
+    <div class="cnx-kpi-card {% if d.finance.overdue_charges_count > 0 %}cnx-tone-red{% else %}cnx-tone-muted{% endif %}">
+      <div class="cnx-kpi-icon"><i class="fas fa-exclamation-triangle"></i></div>
+      <div>
+        <span class="cnx-stat-label">Outstanding Balance</span>
+        <strong class="cnx-stat-value cnx-stat-value-money">UGX {{ d.finance.outstanding_balance|floatformat:0|intcomma }}</strong>
+        <small>{{ d.finance.overdue_charges_count }} overdue · {{ d.finance.open_charges_count }} open charges</small>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-xl-8 col-lg-7 col-md-12">
+      <section class="cnx-panel cnx-panel-tall">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Membership Growth Trend</h4>
+            <p>New member registrations and active memberships by month.</p>
+          </div>
+        </div>
+        <canvas id="deanMembershipGrowthChart"></canvas>
+      </section>
+    </div>
+    <div class="col-xl-4 col-lg-5 col-md-12">
+      <section class="cnx-panel cnx-panel-tall">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Financial Position</h4>
+            <p>Recorded income and expenses over the last six months.</p>
+          </div>
+        </div>
+        <canvas id="deanFinanceChart"></canvas>
+      </section>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-xl-6 col-lg-12">
+      <section class="cnx-panel">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Association Comparison</h4>
+            <p>Largest associations by active and registered membership footprint.</p>
+          </div>
+        </div>
+        {% if d.members_by_association.rows %}
+          <canvas id="deanMembersByAssocChart"></canvas>
+        {% else %}
+          <div class="cnx-empty cnx-empty-compact">No association membership data yet</div>
+        {% endif %}
+      </section>
+    </div>
+    <div class="col-xl-3 col-lg-6 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Member Profile</h4>
+            <p>Distribution by member category.</p>
+          </div>
+        </div>
+        {% if d.member_type_distribution.rows %}
+          <div class="cnx-metric-list">
+            {% for row in d.member_type_distribution.rows %}
+              <div class="cnx-metric-row">
+                <span>{{ row.label }}</span>
+                <strong>{{ row.total|intcomma }}</strong>
+                <small>{{ row.percent }}%</small>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="cnx-empty cnx-empty-compact">No member categories yet</div>
+        {% endif %}
+      </section>
+    </div>
+    <div class="col-xl-3 col-lg-6 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Institutional Mix</h4>
+            <p>Association structure across the institution.</p>
+          </div>
+        </div>
+        <div class="cnx-split-summary">
+          <div>
+            <span>Faculty-Based</span>
+            <strong>{{ d.faculty_based_associations|intcomma }}</strong>
+          </div>
+          <div>
+            <span>Independent</span>
+            <strong>{{ d.non_faculty_based_associations|intcomma }}</strong>
+          </div>
+        </div>
+        <div class="cnx-progress-stack mt-3">
+          <span style="width:{% if d.total_associations %}{% widthratio d.faculty_based_associations d.total_associations 100 %}{% else %}0{% endif %}%"></span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-xl-4 col-lg-6 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Association Activity</h4>
+            <p>Upcoming and recently scheduled events.</p>
+          </div>
+        </div>
+        <div class="cnx-list cnx-list-compact">
+          {% for event in d.events.upcoming %}
+            <div class="cnx-list-row">
+              <div>
+                <strong>{{ event.title }}</strong>
+                <span>{{ event.association.name }} · {{ event.event_date|date:"M j, Y" }}</span>
+              </div>
+            </div>
+          {% empty %}
+            {% for event in d.events.recent|slice:":3" %}
+              <div class="cnx-list-row">
+                <div>
+                  <strong>{{ event.title }}</strong>
+                  <span>{{ event.association.name }} · {{ event.event_date|date:"M j, Y" }}</span>
+                </div>
+              </div>
+            {% empty %}
+              <div class="cnx-empty cnx-empty-compact">No events recorded yet</div>
+            {% endfor %}
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+    <div class="col-xl-4 col-lg-6 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Important Announcements</h4>
+            <p>{{ d.announcements.published_count }} published announcements.</p>
+          </div>
+        </div>
+        <div class="cnx-list cnx-list-compact">
+          {% for ann in d.announcements.latest %}
+            <div class="cnx-list-row">
+              <div>
+                <strong>{{ ann.title }}</strong>
+                <span>{% if ann.association %}{{ ann.association.name }}{% elif ann.faculty %}{{ ann.faculty.name }}{% else %}Global{% endif %} · {{ ann.created_at|date:"M j, Y" }}</span>
+              </div>
+            </div>
+          {% empty %}
+            <div class="cnx-empty cnx-empty-compact">No published announcements yet</div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+    <div class="col-xl-4 col-lg-12 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Financial Risk</h4>
+            <p>Associations with overdue charge exposure.</p>
+          </div>
+        </div>
+        {% if d.risk_rows %}
+          <div class="cnx-rank-list">
+            {% for row in d.risk_rows %}
+              <div class="cnx-rank-row">
+                <span>{{ forloop.counter }}</span>
+                <strong>{{ row.association__name }}</strong>
+                <b>{{ row.total }} overdue</b>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="cnx-empty cnx-empty-compact">No overdue association charges</div>
+        {% endif %}
+      </section>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-xl-6 col-lg-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Collections by Association</h4>
+            <p>Top recorded collections across associations.</p>
+          </div>
+        </div>
+        {% if d.top_finance_rows %}
+          <div class="cnx-rank-list">
+            {% for row in d.top_finance_rows %}
+              <div class="cnx-rank-row">
+                <span>{{ forloop.counter }}</span>
+                <strong>{{ row.membership__association__name }}</strong>
+                <b>UGX {{ row.total|floatformat:0|intcomma }}</b>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="cnx-empty cnx-empty-compact">No recorded collections yet</div>
+        {% endif %}
+      </section>
+    </div>
+    <div class="col-xl-6 col-lg-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Recent Administrative Activity</h4>
+            <p>Latest system actions visible to executive oversight.</p>
+          </div>
+        </div>
+        <div class="cnx-audit-strip cnx-audit-strip-compact">
+          {% for log in d.recent_audit %}
+            <div class="cnx-audit-item">
+              <span class="cnx-audit-dot"></span>
+              <div>
+                <strong>{{ log.action|title }}</strong>
+                <p>{{ log.model_name }}{% if log.object_repr %} · {{ log.object_repr|truncatechars:56 }}{% endif %}</p>
+                <small>{{ log.actor|default:"System" }} · {{ log.created_at|timesince }} ago</small>
+              </div>
+            </div>
+          {% empty %}
+            <div class="cnx-empty cnx-empty-compact">No recent audit activity</div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+  Chart.defaults.maintainAspectRatio = false;
+  Chart.defaults.font.family = "'Inter', 'Source Sans Pro', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  Chart.defaults.color = "#64748b";
+
+  const deanColors = {
+    blue: "#2563eb",
+    blueSoft: "rgba(37, 99, 235, 0.16)",
+    teal: "#0f766e",
+    green: "#16a34a",
+    amber: "#f59e0b",
+    line: "rgba(148, 163, 184, 0.22)"
+  };
+
+  const deanChartOptions = {
+    responsive: true,
+    plugins: {
+      legend: { labels: { usePointStyle: true, boxWidth: 8, boxHeight: 8 } },
+      tooltip: { backgroundColor: "#0f172a", padding: 12, titleMarginBottom: 8 }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { maxRotation: 0 } },
+      y: { beginAtZero: true, grid: { color: deanColors.line }, ticks: { precision: 0 } }
+    }
+  };
+
+  new Chart(document.getElementById("deanMembershipGrowthChart"), {
+    type: "line",
+    data: {
+      labels: {{ d.membership_growth.labels|safe }},
+      datasets: [
+        {
+          label: "New Members",
+          data: {{ d.membership_growth.members|safe }},
+          borderColor: deanColors.blue,
+          backgroundColor: deanColors.blueSoft,
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3
+        },
+        {
+          label: "Active Memberships",
+          data: {{ d.membership_growth.memberships|safe }},
+          borderColor: deanColors.teal,
+          backgroundColor: "rgba(15, 118, 110, 0.12)",
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3
+        }
+      ]
+    },
+    options: deanChartOptions
+  });
+
+  new Chart(document.getElementById("deanFinanceChart"), {
+    type: "bar",
+    data: {
+      labels: {{ d.monthly_finance.labels|safe }},
+      datasets: [
+        {
+          label: "Collected",
+          data: {{ d.monthly_finance.income|safe }},
+          backgroundColor: "rgba(22, 163, 74, 0.78)",
+          borderRadius: 8,
+          maxBarThickness: 30
+        },
+        {
+          label: "Expenses",
+          data: {{ d.monthly_finance.expenses|safe }},
+          backgroundColor: "rgba(245, 158, 11, 0.78)",
+          borderRadius: 8,
+          maxBarThickness: 30
+        }
+      ]
+    },
+    options: {
+      ...deanChartOptions,
+      scales: {
+        ...deanChartOptions.scales,
+        y: {
+          ...deanChartOptions.scales.y,
+          ticks: { callback: (value) => "UGX " + Number(value).toLocaleString() }
+        }
+      }
+    }
+  });
+
+  const deanMembersCanvas = document.getElementById("deanMembersByAssocChart");
+  if (deanMembersCanvas) {
+    new Chart(deanMembersCanvas, {
+      type: "bar",
+      data: {
+        labels: {{ d.members_by_association.labels|safe }},
+        datasets: [{
+          label: "Members",
+          data: {{ d.members_by_association.data|safe }},
+          backgroundColor: "rgba(37, 99, 235, 0.78)",
+          borderColor: deanColors.blue,
+          borderWidth: 1,
+          borderRadius: 8,
+          maxBarThickness: 30
+        }]
+      },
+      options: {
+        ...deanChartOptions,
+        indexAxis: "y",
+        plugins: {
+          ...deanChartOptions.plugins,
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "#0f172a",
+            padding: 12,
+            callbacks: {
+              label: (ctx) => {
+                const pct = {{ d.members_by_association.percent|safe }}[ctx.dataIndex] || 0;
+                return `${ctx.raw} members (${pct}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+</script>

@@ -6,7 +6,7 @@ from django.test.client import RequestFactory
 from django.utils import timezone
 
 from campus_nexus.models import Association, AssociationAdmin, Charge, Expense, Faculty, Member, Membership, Payment
-from campus_nexus.templatetags.dashboard_tags import association_dashboard_data
+from campus_nexus.templatetags.dashboard_tags import association_dashboard_data, dean_dashboard_data
 
 
 class AssociationDashboardDataTests(TestCase):
@@ -109,3 +109,21 @@ class AssociationDashboardDataTests(TestCase):
         self.assertEqual(finance["open_charges_count"], 2)
         self.assertEqual(finance["overdue_charges_count"], 1)
         self.assertEqual(finance["this_month_expenses"], Decimal("40.00"))
+
+    def test_dean_dashboard_data_includes_executive_finance_and_risk_metrics(self):
+        request = RequestFactory().get("/admin/")
+        request.user = self.user
+
+        data = dean_dashboard_data({"request": request})
+
+        finance = data["finance"]
+        self.assertEqual(finance["total_billed"], Decimal("300.00"))
+        self.assertEqual(finance["total_collected"], Decimal("50.00"))
+        self.assertEqual(finance["total_expenses"], Decimal("40.00"))
+        self.assertEqual(finance["net_position"], Decimal("10.00"))
+        self.assertEqual(finance["outstanding_balance"], Decimal("250.00"))
+        self.assertEqual(finance["open_charges_count"], 2)
+        self.assertEqual(finance["overdue_charges_count"], 1)
+        self.assertIn("membership_growth", data)
+        self.assertIn("monthly_finance", data)
+        self.assertEqual(data["risk_rows"][0]["association__name"], self.association.name)

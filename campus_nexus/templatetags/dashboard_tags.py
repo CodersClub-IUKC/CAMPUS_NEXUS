@@ -160,6 +160,30 @@ def dean_dashboard_data(context):
     active_memberships = Membership.objects.filter(status="active").count()
     inactive_memberships = Membership.objects.filter(status="inactive").count()
     suspended_memberships = Membership.objects.filter(status="suspended").count()
+    active_percent = (
+        round((active_memberships / total_members) * 100, 1)
+        if total_members else 0.0
+    )
+
+    charges_qs = Charge.objects.exclude(status="cancelled")
+    total_billed = charges_qs.aggregate(total=Sum("amount_due")).get("total") or ZERO
+    total_collected = (
+        Payment.objects.filter(status="recorded")
+        .aggregate(total=Sum("amount_paid"))
+        .get("total") or ZERO
+    )
+    total_expenses = (
+        Expense.objects.filter(status="recorded")
+        .aggregate(total=Sum("amount"))
+        .get("total") or ZERO
+    )
+    outstanding_balance = _outstanding_balance(charges_qs)
+    overdue_count = charges_qs.filter(is_overdue=True, status__in=["unpaid", "partial"]).count()
+    open_charges_count = charges_qs.filter(status__in=["unpaid", "partial"]).count()
+    collection_rate = (
+        round((float(total_collected) / float(total_billed)) * 100, 1)
+        if total_billed > 0 else 0.0
+    )
 
     members_qs = (
         Membership.objects.values("association__name")
@@ -195,6 +219,16 @@ def dean_dashboard_data(context):
     )
     ev_labels = [r["association__name"] for r in events_qs]
     ev_data = [int(r["total"]) for r in events_qs]
+    total_events = Event.objects.count()
+    upcoming_events = (
+        Event.objects.filter(event_date__gte=timezone.now())
+        .select_related("association")
+        .order_by("event_date")[:5]
+    )
+    recent_events = (
+        Event.objects.select_related("association")
+        .order_by("-event_date")[:5]
+    )
 
     member_type_qs = (
         Member.objects.values("member_type")
@@ -203,10 +237,15 @@ def dean_dashboard_data(context):
     )
     type_labels = [r["member_type"].title() for r in member_type_qs]
     type_data = [int(r["total"]) for r in member_type_qs]
-    type_percent = [
-        0.0 if total_members == 0 else round((v / total_members) * 100, 2)
-        for v in type_data
+    member_type_rows = [
+        {
+            "label": label,
+            "total": total,
+            "percent": 0.0 if total_members == 0 else round((total / total_members) * 100, 1),
+        }
+        for label, total in zip(type_labels, type_data)
     ]
+    type_percent = [row["percent"] for row in member_type_rows]
 
     latest_announcements = (
         Announcement.objects.filter(is_published=True)
@@ -214,24 +253,55 @@ def dean_dashboard_data(context):
         .order_by("-created_at")[:5]
     )
     total_published_announcements = Announcement.objects.filter(is_published=True).count()
+    recent_audit = (
+        AuditLog.objects.select_related("actor", "association")
+        .order_by("-created_at")[:5]
+    )
+    top_finance_rows = list(
+        Payment.objects.filter(status="recorded")
+        .values("membership__association__name")
+        .annotate(total=Sum("amount_paid"))
+        .order_by("-total")[:5]
+    )
+    risk_rows = list(
+        charges_qs.filter(is_overdue=True, status__in=["unpaid", "partial"])
+        .values("association__name")
+        .annotate(total=Count("id"))
+        .order_by("-total")[:5]
+    )
 
     return {
         "total_associations": total_associations,
         "total_members": total_members,
+        "total_events": total_events,
         "faculty_based_associations": faculty_based,
         "non_faculty_based_associations": non_faculty_based,
         "membership_status": {
             "active": active_memberships,
             "inactive": inactive_memberships,
             "suspended": suspended_memberships,
+            "active_percent": active_percent,
+        },
+        "finance": {
+            "total_billed": total_billed,
+            "total_collected": total_collected,
+            "total_expenses": total_expenses,
+            "net_position": total_collected - total_expenses,
+            "outstanding_balance": outstanding_balance,
+            "overdue_charges_count": overdue_count,
+            "open_charges_count": open_charges_count,
+            "collection_rate": collection_rate,
         },
         "top_assoc_name": top_assoc_name,
         "top_assoc_members": top_assoc_members,
         "top_assoc_percent": top_assoc_percent,
+        "membership_growth": _system_membership_growth(months=6),
+        "monthly_finance": _system_monthly_finance(months=6),
         "members_by_association": {
             "labels": _json_list(members_labels),
             "data": _json_list(members_data),
             "percent": _json_list(members_percent),
+            "rows": top_members_qs[:5],
         },
         "events_by_association": {
             "labels": _json_list(ev_labels),
@@ -241,6 +311,7 @@ def dean_dashboard_data(context):
             "labels": _json_list(type_labels),
             "data": _json_list(type_data),
             "percent": _json_list(type_percent),
+            "rows": member_type_rows,
         },
         "assoc_type_split": {
             "labels": _json_list(["Faculty-based", "Non faculty-based"]),
@@ -250,6 +321,13 @@ def dean_dashboard_data(context):
             "latest": latest_announcements,
             "published_count": total_published_announcements,
         },
+        "events": {
+            "upcoming": upcoming_events,
+            "recent": recent_events,
+        },
+        "top_finance_rows": top_finance_rows,
+        "risk_rows": risk_rows,
+        "recent_audit": recent_audit,
     }
 
 
