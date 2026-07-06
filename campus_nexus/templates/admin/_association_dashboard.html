@@ -1,0 +1,308 @@
+{% load humanize %}
+
+<div class="container-fluid cnx-dashboard cnx-dashboard-association">
+
+  <div class="cnx-dashboard-hero cnx-dashboard-hero-pro mb-4">
+    <div class="cnx-hero-copy">
+      <div class="cnx-eyebrow">Association Workspace</div>
+      <h3 class="mb-1">{{ a.association_name }}</h3>
+      <div class="text-muted">Operations, membership, collections, expenses and outstanding obligations.</div>
+      <div class="cnx-hero-meta">
+        <span><i class="far fa-calendar-alt"></i>{% now "M j, Y" %}</span>
+        <span><i class="fas fa-user-check"></i>{{ a.active_members|intcomma }} active members</span>
+        <span><i class="fas fa-percentage"></i>{{ a.finance.collection_rate }}% collection rate</span>
+      </div>
+    </div>
+    <div class="cnx-hero-actions">
+      <a class="btn btn-sm btn-light" href="{{ request.path }}"><i class="fas fa-sync-alt me-1"></i>Refresh</a>
+      <a class="btn btn-sm btn-primary" href="{% url 'admin:campus_nexus_payment_add' %}"><i class="fas fa-credit-card me-1"></i>Record Payment</a>
+    </div>
+  </div>
+
+  <div class="cnx-kpi-grid mb-4">
+    <div class="cnx-kpi-card cnx-tone-blue">
+      <div class="cnx-kpi-icon"><i class="fas fa-users"></i></div>
+      <div>
+        <span class="cnx-stat-label">Total Members</span>
+        <strong class="cnx-stat-value">{{ a.total_members|intcomma }}</strong>
+        <small>{{ a.active_members|intcomma }} active memberships</small>
+      </div>
+    </div>
+    <div class="cnx-kpi-card cnx-tone-slate">
+      <div class="cnx-kpi-icon"><i class="fas fa-calendar-alt"></i></div>
+      <div>
+        <span class="cnx-stat-label">Events</span>
+        <strong class="cnx-stat-value">{{ a.total_events|intcomma }}</strong>
+        <small>{% if a.upcoming_events %}{{ a.upcoming_events|length }} upcoming{% else %}No upcoming events{% endif %}</small>
+      </div>
+    </div>
+    <div class="cnx-kpi-card cnx-tone-green">
+      <div class="cnx-kpi-icon"><i class="fas fa-money-bill-wave"></i></div>
+      <div>
+        <span class="cnx-stat-label">Collected</span>
+        <strong class="cnx-stat-value cnx-stat-value-money">UGX {{ a.finance.total_collected|floatformat:0|intcomma }}</strong>
+        <small>This month UGX {{ a.finance.this_month_collected|floatformat:0|intcomma }}</small>
+      </div>
+    </div>
+    <div class="cnx-kpi-card cnx-tone-amber">
+      <div class="cnx-kpi-icon"><i class="fas fa-receipt"></i></div>
+      <div>
+        <span class="cnx-stat-label">Expenses</span>
+        <strong class="cnx-stat-value cnx-stat-value-money">UGX {{ a.finance.total_expenses|floatformat:0|intcomma }}</strong>
+        <small>This month UGX {{ a.finance.this_month_expenses|floatformat:0|intcomma }}</small>
+      </div>
+    </div>
+    <div class="cnx-kpi-card {% if a.finance.net_position < 0 %}cnx-tone-red{% else %}cnx-tone-teal{% endif %}">
+      <div class="cnx-kpi-icon"><i class="fas fa-balance-scale"></i></div>
+      <div>
+        <span class="cnx-stat-label">Net Position</span>
+        <strong class="cnx-stat-value cnx-stat-value-money">UGX {{ a.finance.net_position|floatformat:0|intcomma }}</strong>
+        <small>{{ a.finance.net_margin_percent }}% margin</small>
+      </div>
+    </div>
+    <div class="cnx-kpi-card {% if a.finance.overdue_charges_count > 0 %}cnx-tone-red{% elif a.finance.outstanding_balance > 0 %}cnx-tone-amber{% else %}cnx-tone-muted{% endif %}">
+      <div class="cnx-kpi-icon"><i class="fas fa-exclamation-circle"></i></div>
+      <div>
+        <span class="cnx-stat-label">Outstanding</span>
+        <strong class="cnx-stat-value cnx-stat-value-money">UGX {{ a.finance.outstanding_balance|floatformat:0|intcomma }}</strong>
+        <small>{{ a.finance.overdue_charges_count }} overdue · {{ a.finance.open_charges_count }} open</small>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-xl-3 col-lg-4 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Collection Rate</h4>
+            <p>Collected against total billed charges.</p>
+          </div>
+        </div>
+        <div class="cnx-rate-display">
+          <strong>{{ a.finance.collection_rate }}%</strong>
+          <span>UGX {{ a.finance.total_collected|floatformat:0|intcomma }} of UGX {{ a.finance.total_billed|floatformat:0|intcomma }}</span>
+        </div>
+        <div class="cnx-progress-stack mt-3">
+          <span style="width:{{ a.finance.collection_rate }}%"></span>
+        </div>
+      </section>
+    </div>
+    <div class="col-xl-3 col-lg-4 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Membership Status</h4>
+            <p>Current association membership state.</p>
+          </div>
+        </div>
+        <div class="cnx-metric-list">
+          <div class="cnx-metric-row"><span>Active</span><strong>{{ a.membership_status.active|default:0 }}</strong><small>members</small></div>
+          <div class="cnx-metric-row"><span>Inactive</span><strong>{{ a.membership_status.inactive|default:0 }}</strong><small>members</small></div>
+          <div class="cnx-metric-row"><span>Suspended</span><strong>{{ a.membership_status.suspended|default:0 }}</strong><small>members</small></div>
+        </div>
+      </section>
+    </div>
+    <div class="col-xl-6 col-lg-4 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>6-Month Income vs Expenses</h4>
+            <p>Monthly recorded collections compared with recorded spending.</p>
+          </div>
+        </div>
+        <canvas id="assocTrendChart"></canvas>
+      </section>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-xl-4 col-lg-6 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Open Charges</h4>
+            <p>Outstanding obligations that need follow-up.</p>
+          </div>
+          <span class="cnx-net-pill {% if a.finance.overdue_charges_count > 0 %}is-negative{% endif %}">{{ a.finance.open_charges_count }} open</span>
+        </div>
+        <div class="cnx-list cnx-list-compact">
+          {% for charge in a.open_charges %}
+            <div class="cnx-list-row">
+              <div>
+                <strong>{{ charge.membership.member.full_name }}</strong>
+                <span>{{ charge.title|default:charge.get_purpose_display }}{% if charge.due_date %} · Due {{ charge.due_date|date:"M j" }}{% endif %}</span>
+              </div>
+              <b>UGX {{ charge.balance|floatformat:0|intcomma }}</b>
+            </div>
+          {% empty %}
+            <div class="cnx-empty cnx-empty-compact">No open charges</div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+    <div class="col-xl-4 col-lg-6 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Recent Payments</h4>
+            <p>Latest recorded member collections.</p>
+          </div>
+          <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_payment_changelist' %}">View</a>
+        </div>
+        <div class="cnx-list cnx-list-compact">
+          {% for p in a.recent_payments %}
+            <div class="cnx-list-row">
+              <div>
+                <strong>{{ p.membership.member.full_name }}</strong>
+                <span>{{ p.charge.title|default:p.charge.get_purpose_display|default:"Payment" }} · {{ p.recorded_at|date:"M j" }}</span>
+              </div>
+              <b>UGX {{ p.amount_paid|floatformat:0|intcomma }}</b>
+            </div>
+          {% empty %}
+            <div class="cnx-empty cnx-empty-compact">No payments recorded yet</div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+    <div class="col-xl-4 col-lg-12 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Recent Expenses</h4>
+            <p>Latest spending recorded by the association.</p>
+          </div>
+          <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_expense_changelist' %}">View</a>
+        </div>
+        <div class="cnx-list cnx-list-compact">
+          {% for expense in a.recent_expenses %}
+            <div class="cnx-list-row">
+              <div>
+                <strong>{{ expense.title }}</strong>
+                <span>{{ expense.get_category_display }} · {{ expense.spent_at|date:"M j" }}</span>
+              </div>
+              <b>UGX {{ expense.amount|floatformat:0|intcomma }}</b>
+            </div>
+          {% empty %}
+            <div class="cnx-empty cnx-empty-compact">No expenses recorded yet</div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-xl-5 col-lg-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Quick Actions</h4>
+            <p>Frequent association workflows.</p>
+          </div>
+        </div>
+        <div class="cnx-action-grid">
+          <a href="{% url 'admin:campus_nexus_membership_add' %}"><i class="fas fa-user-plus"></i><span>Add Membership</span></a>
+          <a href="{% url 'admin:campus_nexus_payment_add' %}"><i class="fas fa-credit-card"></i><span>Record Payment</span></a>
+          <a href="{% url 'admin:campus_nexus_expense_add' %}"><i class="fas fa-receipt"></i><span>Record Expense</span></a>
+          <a href="{% url 'admin:campus_nexus_charge_changelist' %}"><i class="fas fa-file-invoice-dollar"></i><span>View Charges</span></a>
+        </div>
+      </section>
+    </div>
+    <div class="col-xl-3 col-lg-6 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Upcoming Events</h4>
+            <p>Scheduled association activities.</p>
+          </div>
+        </div>
+        <div class="cnx-list cnx-list-compact">
+          {% for event in a.upcoming_events %}
+            <div class="cnx-list-row">
+              <div>
+                <strong>{{ event.title }}</strong>
+                <span>{{ event.event_date|date:"M j, Y" }} · {{ event.venue }}</span>
+              </div>
+            </div>
+          {% empty %}
+            <div class="cnx-empty cnx-empty-compact">No upcoming events</div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+    <div class="col-xl-4 col-lg-6 col-md-12">
+      <section class="cnx-panel cnx-panel-compact">
+        <div class="cnx-panel-head">
+          <div>
+            <h4>Announcements</h4>
+            <p>Published updates relevant to this association.</p>
+          </div>
+          <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:campus_nexus_announcement_add' %}">Post</a>
+        </div>
+        <div class="cnx-list cnx-list-compact">
+          {% for ann in a.announcements.latest %}
+            <div class="cnx-list-row">
+              <div>
+                <strong>{{ ann.title }}</strong>
+                <span>{{ ann.created_at|date:"M j" }} · {{ ann.message|truncatechars:70 }}</span>
+              </div>
+            </div>
+          {% empty %}
+            <div class="cnx-empty cnx-empty-compact">No announcements yet</div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+  Chart.defaults.maintainAspectRatio = false;
+  Chart.defaults.font.family = "'Inter', 'Source Sans Pro', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  Chart.defaults.color = "#64748b";
+
+  const assocThemeStyle = getComputedStyle(document.documentElement);
+  const assocPrimary = assocThemeStyle.getPropertyValue("--bs-primary").trim() || "#198754";
+  const assocPrimaryRgb = assocThemeStyle.getPropertyValue("--bs-primary-rgb").trim() || "25,135,84";
+  const assocDanger = assocThemeStyle.getPropertyValue("--bs-danger").trim() || "#dc3545";
+
+  new Chart(document.getElementById("assocTrendChart"), {
+    type: "bar",
+    data: {
+      labels: {{ a.monthly_trend.labels|safe }},
+      datasets: [
+        {
+          label: "Income",
+          data: {{ a.monthly_trend.income|safe }},
+          backgroundColor: `rgba(${assocPrimaryRgb},0.72)`,
+          borderRadius: 8,
+          maxBarThickness: 32
+        },
+        {
+          label: "Expenses",
+          data: {{ a.monthly_trend.expenses|safe }},
+          backgroundColor: "rgba(220,53,69,0.68)",
+          borderRadius: 8,
+          maxBarThickness: 32
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { usePointStyle: true, boxWidth: 8, boxHeight: 8 } },
+        tooltip: { backgroundColor: "#0f172a", padding: 12 }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxRotation: 0 } },
+        y: {
+          beginAtZero: true,
+          grid: { color: "rgba(148, 163, 184, 0.22)" },
+          ticks: { callback: (value) => "UGX " + Number(value).toLocaleString() }
+        }
+      }
+    }
+  });
+</script>

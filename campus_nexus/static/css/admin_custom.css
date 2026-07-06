@@ -790,6 +790,23 @@ body.jazzmin-login-page #lockout-note {
     background: linear-gradient(90deg, var(--cnx-primary), var(--cnx-accent));
 }
 
+.cnx-rate-display strong {
+    display: block;
+    color: var(--cnx-primary);
+    font-size: 2rem;
+    font-weight: 850;
+    line-height: 1;
+}
+
+.cnx-rate-display span {
+    display: block;
+    margin-top: 0.55rem;
+    color: var(--cnx-muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1.35;
+}
+
 .cnx-dashboard-executive .cnx-audit-strip-compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }

@@ -422,6 +422,9 @@ def association_dashboard_data(context):
         is_overdue=True, status__in=["unpaid", "partial"]
     ).count()
     open_charges_count = charges_qs.filter(status__in=["unpaid", "partial"]).count()
+    paid_charges_count = charges_qs.filter(status="paid").count()
+    partial_charges_count = charges_qs.filter(status="partial").count()
+    unpaid_charges_count = charges_qs.filter(status="unpaid").count()
 
     collection_rate = (
         round((float(total_collected) / float(total_billed)) * 100, 1)
@@ -457,6 +460,20 @@ def association_dashboard_data(context):
         .select_related("membership__member", "charge")
         .order_by("-recorded_at")[:6]
     )
+    recent_expenses = (
+        Expense.objects.filter(association=assoc, status="recorded")
+        .select_related("recorded_by")
+        .order_by("-spent_at", "-recorded_at")[:5]
+    )
+    open_charges = (
+        charges_qs.filter(status__in=["unpaid", "partial"])
+        .select_related("membership__member")
+        .order_by("-is_overdue", "due_date", "-created_at")[:5]
+    )
+    upcoming_events = (
+        Event.objects.filter(association=assoc, event_date__gte=timezone.now())
+        .order_by("event_date")[:5]
+    )
 
     latest_announcements = (
         Announcement.objects.filter(
@@ -485,12 +502,18 @@ def association_dashboard_data(context):
             "outstanding_balance": outstanding_balance,
             "overdue_charges_count": overdue_charges_count,
             "open_charges_count": open_charges_count,
+            "paid_charges_count": paid_charges_count,
+            "partial_charges_count": partial_charges_count,
+            "unpaid_charges_count": unpaid_charges_count,
             "this_month_collected": this_month_collected,
             "this_month_expenses": this_month_expenses,
             "collection_rate": collection_rate,
         },
         "monthly_trend": monthly_trend,
         "recent_payments": recent_payments,
+        "recent_expenses": recent_expenses,
+        "open_charges": open_charges,
+        "upcoming_events": upcoming_events,
         "announcements": {"latest": latest_announcements},
     }
 

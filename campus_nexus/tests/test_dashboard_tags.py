@@ -109,6 +109,12 @@ class AssociationDashboardDataTests(TestCase):
         self.assertEqual(finance["open_charges_count"], 2)
         self.assertEqual(finance["overdue_charges_count"], 1)
         self.assertEqual(finance["this_month_expenses"], Decimal("40.00"))
+        self.assertEqual(finance["paid_charges_count"], 0)
+        self.assertEqual(finance["partial_charges_count"], 1)
+        self.assertEqual(finance["unpaid_charges_count"], 1)
+        self.assertEqual(len(data["recent_expenses"]), 1)
+        self.assertEqual(len(data["open_charges"]), 2)
+        self.assertIn("upcoming_events", data)
 
     def test_dean_dashboard_data_includes_executive_finance_and_risk_metrics(self):
         request = RequestFactory().get("/admin/")
