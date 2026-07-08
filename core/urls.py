@@ -32,6 +32,7 @@ urlpatterns = [
     path("manifest.webmanifest", core_views.webmanifest, name="webmanifest"),
     path("service-worker.js", core_views.service_worker, name="service_worker"),
     path("offline/", core_views.offline, name="offline"),
+    path("api/health/", core_views.health, name="health"),
     path(
         "favicon.ico",
         RedirectView.as_view(url="/static/img/favicon.ico", permanent=True),

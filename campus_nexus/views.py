@@ -16,34 +16,45 @@ import hmac
 import hashlib
 import subprocess
 import os
+from django.conf import settings
 from django.http import HttpResponse, HttpResponseForbidden
 from django.views.decorators.csrf import csrf_exempt
-
-# This secret MUST match your GitHub webhook secret
-SECRET = b"django-insecure-2bvf7*#lntuaw8ga$5vgu8ytb3d(3ct4ir8q-bb27$py%*4_rc"
 
 @csrf_exempt
 def github_deploy(request):
     if request.method != "POST":
         return HttpResponseForbidden("Only POST allowed")
 
+    if not getattr(settings, "GITHUB_DEPLOY_WEBHOOK_ENABLED", False):
+        return HttpResponseForbidden("Deployment webhook disabled")
+
+    webhook_secret = getattr(settings, "GITHUB_DEPLOY_WEBHOOK_SECRET", "")
+    deploy_script = getattr(settings, "GITHUB_DEPLOY_SCRIPT", "")
+    if not webhook_secret or not deploy_script:
+        return HttpResponseForbidden("Deployment webhook not configured")
+
     # Verify GitHub signature
     header_signature = request.headers.get("X-Hub-Signature-256")
     if not header_signature:
         return HttpResponseForbidden("Missing signature")
 
-    sha_name, signature = header_signature.split("=")
+    try:
+        sha_name, signature = header_signature.split("=", 1)
+    except ValueError:
+        return HttpResponseForbidden("Invalid signature format")
+
     if sha_name != "sha256":
         return HttpResponseForbidden("Invalid signature format")
 
-    mac = hmac.new(SECRET, msg=request.body, digestmod=hashlib.sha256)
+    mac = hmac.new(webhook_secret.encode("utf-8"), msg=request.body, digestmod=hashlib.sha256)
     if not hmac.compare_digest(mac.hexdigest(), signature):
         return HttpResponseForbidden("Invalid signature")
 
     # Run deploy script asynchronously
-    subprocess.Popen(["/bin/bash", os.path.expanduser("~/your_project_directory/deploy.sh")])
+    script_path = os.path.abspath(os.path.expanduser(deploy_script))
+    subprocess.Popen(["/bin/bash", script_path], cwd=os.path.dirname(script_path) or None)
 
-    return HttpResponse(" Deployment started", status=200)
+    return HttpResponse("Deployment started", status=202)
 
 
 # Base view with JWT + IsAuthenticated

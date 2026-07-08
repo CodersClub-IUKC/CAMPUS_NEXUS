@@ -59,3 +59,7 @@ def offline(request):
     response = render(request, "pwa/offline.html")
     response["Cache-Control"] = "public, max-age=3600"
     return response
+
+
+def health(request):
+    return JsonResponse({"status": "ok"})
