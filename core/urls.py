@@ -72,6 +72,7 @@ urlpatterns = [
     ),
     path('admin/campus_nexus/billing-dashboard/', campus_admin_views.billing_dashboard, name='billing_dashboard'),
     path('admin/', admin.site.urls),
+    path("api/v1/", include("campus_nexus.api.v1.urls")),
     path("api/v2/campus_nexus/", include('campus_nexus.urls')),
 ]
 

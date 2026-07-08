@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -17,7 +18,9 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "django_extensions",
     "rest_framework",
+    "corsheaders",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     # debug_toolbar is added only in development.py
 ]
 
@@ -26,6 +29,7 @@ MIDDLEWARE = [
     "whitenoise.middleware.WhiteNoiseMiddleware",  # Must be right after SecurityMiddleware
     "django.contrib.sessions.middleware.SessionMiddleware",
     "campus_nexus.middleware.AdminLoginRateLimitMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -113,6 +117,18 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        minutes=int(os.getenv("SIMPLE_JWT_ACCESS_TOKEN_MINUTES", "15"))
+    ),
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        days=int(os.getenv("SIMPLE_JWT_REFRESH_TOKEN_DAYS", "7"))
+    ),
+    "ROTATE_REFRESH_TOKENS": os.getenv("SIMPLE_JWT_ROTATE_REFRESH_TOKENS", "true").lower() == "true",
+    "BLACKLIST_AFTER_ROTATION": os.getenv("SIMPLE_JWT_BLACKLIST_AFTER_ROTATION", "true").lower() == "true",
+    "UPDATE_LAST_LOGIN": True,
 }
 
 

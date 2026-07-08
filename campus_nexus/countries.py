@@ -6,7 +6,7 @@ from pathlib import Path
 ISO3166_TAB_PATH = Path("/usr/share/zoneinfo/iso3166.tab")
 
 FALLBACK_COUNTRY_NAMES = [
-    "Uganda",
+    "Ugandan",
     "Kenya",
     "Tanzania",
     "Rwanda",
@@ -60,4 +60,3 @@ COUNTRY_CHOICES = [("", "Select country")] + [(name, name) for name in _load_cou
 
 # Case-insensitive lookup to normalize imported CSV values.
 COUNTRY_LOOKUP = {name.lower(): name for _, name in COUNTRY_CHOICES if name}
-

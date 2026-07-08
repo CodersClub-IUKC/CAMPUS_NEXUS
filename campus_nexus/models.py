@@ -1,4 +1,6 @@
 import hashlib
+import secrets
+import uuid
 
 from django.db import models
 from django.utils import timezone
@@ -178,6 +180,58 @@ class Association(models.Model):
     def __str__(self):
         return self.name
 
+
+class AssociationPaymentInstruction(models.Model):
+    METHOD_CHOICES = [
+        ("cash", "Cash"),
+    ]
+
+    association = models.ForeignKey(
+        Association,
+        on_delete=models.CASCADE,
+        related_name="payment_instructions",
+    )
+    payment_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default="cash")
+    payment_location = models.CharField(max_length=200)
+    pay_to = models.CharField(max_length=150)
+    contact_phone = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        validators=[RegexValidator(r'^\+?\d{9,15}$')],
+    )
+    instructions = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("association__name", "payment_method", "-is_active", "-updated_at")
+        indexes = [
+            models.Index(fields=["association", "payment_method", "is_active"]),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.is_active and self.association_id and self.payment_method:
+            duplicate = AssociationPaymentInstruction.objects.filter(
+                association_id=self.association_id,
+                payment_method=self.payment_method,
+                is_active=True,
+            ).exclude(pk=self.pk)
+            if duplicate.exists():
+                raise ValidationError(
+                    {
+                        "is_active": (
+                            "Only one active payment instruction is allowed per "
+                            "association and payment method."
+                        )
+                    }
+                )
+
+    def __str__(self):
+        return f"{self.association.name} - {self.get_payment_method_display()}"
+
 class Member(models.Model):
     MEMBER_TYPES = [
         ('student', 'Student'),
@@ -187,6 +241,13 @@ class Member(models.Model):
 
     first_name = models.CharField(max_length=50, default='')
     last_name = models.CharField(max_length=50, default='')
+    user = models.OneToOneField(
+        User,
+        on_delete=models.SET_NULL,
+        related_name="member_profile",
+        null=True,
+        blank=True,
+    )
     photo = models.ImageField(upload_to="members/photos/", blank=True, null=True)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=15, validators=[RegexValidator(r'^\+?\d{9,15}$')])
@@ -224,6 +285,7 @@ class Membership(models.Model):
     member = models.ForeignKey(Member, on_delete=models.CASCADE, related_name="memberships")
     association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name="memberships")
     joined_at = models.DateTimeField(auto_now_add=True)
+    verification_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
 
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="active")
 
@@ -266,19 +328,18 @@ class Membership(models.Model):
             Membership.objects.filter(member_id=self.member_id, association__faculty__isnull=False)
             .exclude(pk=self.pk)
             .select_related("association__faculty")
+            .first()
         )
-
-        for m in existing:
-            if m.association.faculty_id != assoc.faculty_id:
-                raise ValidationError(
-                    {
-                        NON_FIELD_ERRORS: (
-                            "Member you are trying to add belongs to a faculty-based association "
-                            f"({m.association.name} - {m.association.faculty.name}). "
-                            "You cannot add this member to another faculty-based association."
-                        )
-                    }
-                )
+        if existing:
+            raise ValidationError(
+                {
+                    NON_FIELD_ERRORS: (
+                        "Member you are trying to add already belongs to an academic association "
+                        f"({existing.association.name} - {existing.association.faculty.name}). "
+                        "A member can belong to only one academic association."
+                    )
+                }
+            )
 
     def save(self, *args, **kwargs):
         if not self.subscription_anchor_date:
@@ -287,6 +348,79 @@ class Membership(models.Model):
 
     def __str__(self):
         return f"{self.member.full_name} → {self.association.name}"
+
+
+class MembershipApplication(models.Model):
+    STATUS_PENDING_APPROVAL = "pending_approval"
+    STATUS_APPROVED_PENDING_PAYMENT = "approved_pending_payment"
+    STATUS_ACTIVE = "active"
+    STATUS_REJECTED = "rejected"
+    STATUS_CANCELLED = "cancelled"
+
+    OPEN_STATUSES = (
+        STATUS_PENDING_APPROVAL,
+        STATUS_APPROVED_PENDING_PAYMENT,
+    )
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING_APPROVAL, "Pending Approval"),
+        (STATUS_APPROVED_PENDING_PAYMENT, "Approved - Pending Payment"),
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_REJECTED, "Rejected"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    member = models.ForeignKey(Member, on_delete=models.CASCADE, related_name="membership_applications")
+    association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name="membership_applications")
+    membership = models.OneToOneField(
+        Membership,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="application",
+    )
+    charge = models.OneToOneField(
+        "Charge",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="membership_application",
+    )
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_PENDING_APPROVAL)
+    applied_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_membership_applications",
+    )
+    rejection_reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-applied_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["member", "association"],
+                condition=Q(status__in=["pending_approval", "approved_pending_payment"]),
+                name="unique_open_membership_application",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["member", "status"]),
+            models.Index(fields=["association", "status"]),
+            models.Index(fields=["applied_at"]),
+        ]
+
+    @property
+    def is_open(self):
+        return self.status in self.OPEN_STATUSES
+
+    def __str__(self):
+        return f"{self.member.full_name} → {self.association.name} ({self.get_status_display()})"
 
 class Cabinet(models.Model):
    association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name='cabinets')
@@ -409,7 +543,12 @@ class Charge(models.Model):
 
     @property
     def amount_paid_total(self):
-        return self.payments.aggregate(s=models.Sum("amount_paid")).get("s") or 0
+        return (
+            self.payments.filter(status="recorded")
+            .aggregate(s=models.Sum("amount_paid"))
+            .get("s")
+            or 0
+        )
 
     def recompute_status(self):
         if self.status == "cancelled":
@@ -458,7 +597,7 @@ class Payment(models.Model):
     recorded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="recorded_payments")
 
     payment_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default="cash")
-    reference_code = models.CharField(max_length=120, blank=True, default="")  # momo txn, bank slip no.
+    reference_code = models.CharField(max_length=120, blank=True, default="", db_index=True)
     receipt_image = models.ImageField(upload_to="payments/receipts/", null=True, blank=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="recorded")
@@ -481,6 +620,49 @@ class Payment(models.Model):
 
         if self.amount_paid is not None and self.amount_paid <= 0:
             raise ValidationError({"amount_paid": "Amount paid must be greater than 0."})
+
+        if self.charge_id and self.status == "recorded":
+            if self.charge.status == "cancelled":
+                raise ValidationError({"charge": "Cancelled charges cannot receive payments."})
+
+            paid_queryset = self.charge.payments.filter(status="recorded")
+            if self.pk:
+                paid_queryset = paid_queryset.exclude(pk=self.pk)
+            already_paid = paid_queryset.aggregate(total=models.Sum("amount_paid")).get("total") or 0
+            outstanding = self.charge.amount_due - already_paid
+            if self.amount_paid is not None and self.amount_paid > outstanding:
+                raise ValidationError(
+                    {
+                        "amount_paid": (
+                            "Payment amount exceeds the outstanding charge balance "
+                            f"of UGX {outstanding}."
+                        )
+                    }
+                )
+
+        if self.reference_code:
+            existing = Payment.objects.filter(reference_code__iexact=self.reference_code).exclude(pk=self.pk)
+            if existing.exists():
+                raise ValidationError({"reference_code": "Payment reference code must be unique."})
+
+        if self.pk:
+            old_reference = Payment.objects.filter(pk=self.pk).values_list("reference_code", flat=True).first()
+            if old_reference and self.reference_code != old_reference:
+                raise ValidationError({"reference_code": "Payment reference code cannot be changed."})
+
+    @classmethod
+    def generate_reference_code(cls):
+        year = timezone.now().year
+        for _attempt in range(20):
+            reference_code = f"PAY-{year}-{secrets.token_hex(4).upper()}"
+            if not cls.objects.filter(reference_code__iexact=reference_code).exists():
+                return reference_code
+        raise ValidationError({"reference_code": "Could not generate a unique payment reference code."})
+
+    def save(self, *args, **kwargs):
+        if not self.reference_code:
+            self.reference_code = self.generate_reference_code()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.membership.member.full_name} - {self.amount_paid}"
@@ -622,6 +804,81 @@ class AuditLog(models.Model):
         return f"{self.created_at} | {self.action} | {self.model_name}#{self.object_id}"
 
 
+class Notification(models.Model):
+    TYPE_ACCOUNT = "account"
+    TYPE_MEMBERSHIP = "membership"
+    TYPE_APPLICATION = "application"
+    TYPE_PAYMENT = "payment"
+    TYPE_EVENT = "event"
+    TYPE_ANNOUNCEMENT = "announcement"
+    TYPE_SYSTEM = "system"
+
+    TYPE_CHOICES = [
+        (TYPE_ACCOUNT, "Account"),
+        (TYPE_MEMBERSHIP, "Membership"),
+        (TYPE_APPLICATION, "Application"),
+        (TYPE_PAYMENT, "Payment"),
+        (TYPE_EVENT, "Event"),
+        (TYPE_ANNOUNCEMENT, "Announcement"),
+        (TYPE_SYSTEM, "System"),
+    ]
+
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="member_notifications",
+    )
+    title = models.CharField(max_length=160)
+    message = models.TextField()
+    notification_type = models.CharField(max_length=24, choices=TYPE_CHOICES, default=TYPE_SYSTEM)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    related_url = models.CharField(max_length=255, blank=True, default="")
+    related_object_type = models.CharField(max_length=120, blank=True, default="")
+    related_object_id = models.CharField(max_length=64, blank=True, default="")
+    deduplication_key = models.CharField(max_length=180, null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = [
+            models.Index(fields=["recipient", "is_read"]),
+            models.Index(fields=["recipient", "created_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["recipient", "deduplication_key"],
+                name="unique_notification_dedup_per_recipient",
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.related_url and (not self.related_url.startswith("/") or self.related_url.startswith("//")):
+            raise ValidationError({"related_url": "Related URL must be a relative Member Portal path."})
+
+    def __str__(self):
+        return f"{self.recipient} - {self.title}"
+
+
+class MemberNotificationPreference(models.Model):
+    member = models.OneToOneField(
+        Member,
+        on_delete=models.CASCADE,
+        related_name="notification_preferences",
+    )
+    event_notifications = models.BooleanField(default=True)
+    announcement_notifications = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("member__first_name", "member__last_name", "member_id")
+
+    def __str__(self):
+        return f"Notification preferences for {self.member.full_name}"
+
+
 class Event(models.Model):
     association = models.ForeignKey(Association, on_delete=models.CASCADE, related_name='events')
     title = models.CharField(max_length=200)
@@ -634,7 +891,73 @@ class Event(models.Model):
     def __str__(self):
         return self.title
 
+
+class EventRegistration(models.Model):
+    STATUS_REGISTERED = "registered"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_REGISTERED, "Registered"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="registrations")
+    member = models.ForeignKey(Member, on_delete=models.CASCADE, related_name="event_registrations")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_REGISTERED)
+    registered_at = models.DateTimeField(default=timezone.now)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    transition_version = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-registered_at", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event", "member"],
+                name="unique_event_registration_per_member",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["member", "status"]),
+            models.Index(fields=["event", "status"]),
+            models.Index(fields=["registered_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.member.full_name} - {self.event.title} ({self.get_status_display()})"
+
 class Feedback(models.Model):
+    CATEGORY_GENERAL = "general"
+    CATEGORY_MEMBERSHIP = "membership"
+    CATEGORY_PAYMENT = "payment"
+    CATEGORY_EVENT = "event"
+    CATEGORY_TECHNICAL = "technical"
+    CATEGORY_COMPLAINT = "complaint"
+    CATEGORY_SUGGESTION = "suggestion"
+
+    CATEGORY_CHOICES = [
+        (CATEGORY_GENERAL, "General"),
+        (CATEGORY_MEMBERSHIP, "Membership"),
+        (CATEGORY_PAYMENT, "Payment"),
+        (CATEGORY_EVENT, "Event"),
+        (CATEGORY_TECHNICAL, "Technical"),
+        (CATEGORY_COMPLAINT, "Complaint"),
+        (CATEGORY_SUGGESTION, "Suggestion"),
+    ]
+
+    STATUS_OPEN = "open"
+    STATUS_IN_REVIEW = "in_review"
+    STATUS_RESOLVED = "resolved"
+    STATUS_CLOSED = "closed"
+
+    STATUS_CHOICES = [
+        (STATUS_OPEN, "Open"),
+        (STATUS_IN_REVIEW, "In Review"),
+        (STATUS_RESOLVED, "Resolved"),
+        (STATUS_CLOSED, "Closed"),
+    ]
+
     association = models.ForeignKey(
         Association, on_delete=models.SET_NULL, null=True, blank=True, related_name="feedbacks"
     )
@@ -642,16 +965,38 @@ class Feedback(models.Model):
         Member, on_delete=models.SET_NULL, null=True, blank=True, related_name="feedbacks"
     )
 
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default=CATEGORY_GENERAL)
     subject = models.CharField(max_length=200)
     message = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_OPEN)
+    admin_response = models.TextField(blank=True, default="")
+    responded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="responded_feedbacks",
+    )
+    responded_at = models.DateTimeField(null=True, blank=True)
 
     submitted_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="submitted_feedbacks"
     )
     submitted_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ("-submitted_at",)
+
+    def clean(self):
+        super().clean()
+        if not (self.subject or "").strip():
+            raise ValidationError({"subject": "Subject is required."})
+        if not (self.message or "").strip():
+            raise ValidationError({"message": "Message is required."})
+        self.subject = self.subject.strip()
+        self.message = self.message.strip()
+        self.admin_response = (self.admin_response or "").strip()
 
     def __str__(self):
         who = self.member.full_name if self.member else (self.submitted_by.username if self.submitted_by else "Unknown")

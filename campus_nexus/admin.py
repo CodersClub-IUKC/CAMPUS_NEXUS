@@ -8,18 +8,19 @@ from django.db.models import Count, Q, Sum
 from django.http import HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
-from django.urls import path, resolve
+from django.urls import path, resolve, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.views.decorators.http import require_http_methods
 
 from campus_nexus.models import (
-    Announcement, Association, AssociationAdmin, AuditLog,
+    Announcement, Association, AssociationAdmin, AssociationPaymentInstruction, AuditLog,
     Bill, BillableItem, BillMembership,
     Cabinet, CabinetMember, Charge, Course,
     Dean, Event, Expense, Faculty, Fee, Feedback,
     Guild, GuildCabinet, GuildExecutive,
-    Member, Membership, Payment,
+    Member, MemberNotificationPreference, Membership, MembershipApplication, Notification, Payment,
+    EventRegistration,
 )
 from campus_nexus.services.charges import get_or_create_charge_for_fee, create_charge_custom
 from .notifications.email_utils import send_payment_recorded_email
@@ -27,6 +28,24 @@ from campus_nexus.services.subscriptions import ensure_current_subscription_char
 from campus_nexus.services.subscription_emails import send_subscription_reminder_email
 from campus_nexus.services.audit import record_audit_event
 from campus_nexus.services.onboarding import send_onboarding_invitation_email
+from campus_nexus.services.membership_application import (
+    MembershipApplicationError,
+    approve_membership_application,
+    get_required_membership_fee,
+    reject_membership_application,
+)
+from campus_nexus.services.member_portal_account import (
+    MemberPortalAccountError,
+    activate_member_portal_account,
+    disable_member_portal_account,
+    enable_member_portal_account,
+    send_member_portal_setup_email,
+)
+from campus_nexus.services.membership_cards import (
+    membership_card_available,
+    membership_verification_path,
+    rotate_membership_verification_token,
+)
 
 # ---------------------------------------------------------------------
 # Mixins
@@ -451,7 +470,7 @@ class AssociationModelAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         if hasattr(Payment, "association"):
             total = Payment.objects.filter(association=obj).aggregate(s=Sum("amount_paid"))["s"]
         else:
-            total = Payment.objects.filter(membership__association=obj).aggregate(s=Sum("amount_paid"))["s"]
+            total = Payment.objects.filter(membership__association=obj, status="recorded").aggregate(s=Sum("amount_paid"))["s"]
 
         return total or 0
     total_fees_collected.short_description = "Total Fees Collected"
@@ -528,7 +547,7 @@ class AssociationModelAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         members_count = Membership.objects.filter(association=obj).values("member_id").distinct().count()
         events_count = Event.objects.filter(association=obj).count()
         total_collected = (
-            Payment.objects.filter(membership__association=obj).aggregate(total=Sum("amount_paid"))["total"] or 0
+            Payment.objects.filter(membership__association=obj, status="recorded").aggregate(total=Sum("amount_paid"))["total"] or 0
         )
 
         stats_cards = []
@@ -563,17 +582,222 @@ class AssociationModelAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
                 raise PermissionDenied("You can only edit your own association.")
         super().save_model(request, obj, form, change)
 
+
+@admin.register(AssociationPaymentInstruction)
+class AssociationPaymentInstructionAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = (
+        "association",
+        "payment_method",
+        "payment_location",
+        "pay_to",
+        "contact_phone",
+        "is_active",
+        "updated_at",
+    )
+    list_filter = ("payment_method", "is_active", "association")
+    search_fields = ("association__name", "payment_location", "pay_to", "contact_phone")
+    list_select_related = ("association",)
+    readonly_fields = ("created_at", "updated_at")
+    fieldsets = (
+        ("Payment Instruction", {
+            "fields": (
+                "association",
+                "payment_method",
+                "payment_location",
+                "pay_to",
+                "contact_phone",
+                "instructions",
+                "is_active",
+            )
+        }),
+        ("Audit", {"fields": ("created_at", "updated_at")}),
+    )
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser or bool(self.is_association_admin(request))
+
+    def has_view_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return False
+        assoc_admin = self.get_association_admin(request)
+        if not assoc_admin:
+            return False
+        if obj is not None:
+            return obj.association_id == assoc_admin.association_id
+        return True
+
+    def has_add_permission(self, request):
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return False
+        return request.user.is_superuser or bool(self.get_association_admin(request))
+
+    def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return False
+        assoc_admin = self.get_association_admin(request)
+        if not assoc_admin:
+            return False
+        if obj is not None:
+            return obj.association_id == assoc_admin.association_id
+        return True
+
+    def has_delete_permission(self, request, obj=None):
+        return self.has_change_permission(request, obj)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related("association")
+        if request.user.is_superuser:
+            return qs
+        assoc_admin = self.get_association_admin(request)
+        if assoc_admin and not (self.is_dean(request) or self.is_guild_admin(request)):
+            return qs.filter(association_id=assoc_admin.association_id)
+        return qs.none()
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "association" and self.is_association_admin(request) and not request.user.is_superuser:
+            kwargs["queryset"] = Association.objects.filter(pk=request.user.association_admin.association_id)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        if self.is_association_admin(request) and not request.user.is_superuser:
+            obj.association = request.user.association_admin.association
+        obj.full_clean()
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Notification)
+class NotificationAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = ("recipient", "title", "notification_type", "is_read", "created_at")
+    list_filter = ("notification_type", "is_read", "created_at")
+    search_fields = (
+        "recipient__username",
+        "recipient__email",
+        "recipient__member_profile__first_name",
+        "recipient__member_profile__last_name",
+        "recipient__member_profile__registration_number",
+        "title",
+    )
+    readonly_fields = (
+        "recipient",
+        "title",
+        "message",
+        "notification_type",
+        "is_read",
+        "created_at",
+        "read_at",
+        "related_url",
+        "related_object_type",
+        "related_object_id",
+        "deduplication_key",
+    )
+    fieldsets = (
+        ("Notification", {"fields": ("recipient", "title", "message", "notification_type", "is_read")}),
+        ("Navigation", {"fields": ("related_url", "related_object_type", "related_object_id")}),
+        ("System", {"fields": ("created_at", "read_at", "deduplication_key")}),
+    )
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_dean(request)
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_dean(request)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related("recipient", "recipient__member_profile")
+        if request.user.is_superuser or self.is_dean(request):
+            return qs
+        return qs.none()
+
+
+@admin.register(MemberNotificationPreference)
+class MemberNotificationPreferenceAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = ("member", "event_notifications", "announcement_notifications", "updated_at")
+    list_filter = ("event_notifications", "announcement_notifications", "updated_at")
+    search_fields = (
+        "member__first_name",
+        "member__last_name",
+        "member__email",
+        "member__registration_number",
+    )
+    readonly_fields = ("member", "event_notifications", "announcement_notifications", "created_at", "updated_at")
+    list_select_related = ("member",)
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser or self.is_dean(request)
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser or self.is_dean(request)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related("member")
+        if request.user.is_superuser or self.is_dean(request):
+            return qs
+        return qs.none()
+
+
 @admin.register(Member)
 class MemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
     search_fields = ("registration_number", "email", "phone", "first_name", "last_name", "national_id_number")
     list_display = ("photo_thumb", "first_name", "last_name", "registration_number", "email", "phone", "member_type")
-    readonly_fields = ("photo_preview", "created_at", "created_by", "created_in_association")
+    readonly_fields = (
+        "photo_preview",
+        "portal_account_status",
+        "portal_account_message",
+        "portal_account_actions",
+        "linked_user_display",
+        "portal_username",
+        "portal_user_email",
+        "portal_user_active_status",
+        "portal_last_login",
+        "portal_date_joined",
+        "created_at",
+        "created_by",
+        "created_in_association",
+    )
     ordering = ("first_name", "last_name")
     list_filter = ("member_type", "faculty", "course")
     fieldsets = (
         ("Profile Photo", {"fields": ("photo_preview", "photo")}),
         ("Personal Details", {"fields": ("first_name", "last_name", "email", "phone", "nationality", "member_type")}),
         ("Academic Details", {"fields": ("registration_number", "national_id_number", "faculty", "course")}),
+        (
+            "Portal Account",
+            {
+                "fields": (
+                    "portal_account_status",
+                    "portal_account_message",
+                    "portal_account_actions",
+                    "linked_user_display",
+                    "portal_username",
+                    "portal_user_email",
+                    "portal_user_active_status",
+                    "portal_last_login",
+                    "portal_date_joined",
+                )
+            },
+        ),
         ("Audit", {"fields": ("created_at", "created_by", "created_in_association")}),
     )
 
@@ -613,10 +837,125 @@ class MemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         return request.user.is_superuser or self.is_guild_admin(request)
 
     def get_readonly_fields(self, request, obj=None):
-        base_readonly = ["photo_preview", "created_at", "created_by", "created_in_association"]
+        base_readonly = list(self.readonly_fields)
         if request.user.is_superuser or self.is_guild_admin(request):
             return base_readonly
         return [f.name for f in self.model._meta.fields] + base_readonly
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        self._portal_request = request
+        return super().change_view(request, object_id, form_url=form_url, extra_context=extra_context)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "<path:object_id>/portal-account/activate/",
+                self.admin_site.admin_view(self.activate_portal_account_view),
+                name="campus_nexus_member_activate_portal_account",
+            ),
+            path(
+                "<path:object_id>/portal-account/send-setup-link/",
+                self.admin_site.admin_view(self.send_portal_setup_link_view),
+                name="campus_nexus_member_send_portal_setup_link",
+            ),
+            path(
+                "<path:object_id>/portal-account/disable/",
+                self.admin_site.admin_view(self.disable_portal_account_view),
+                name="campus_nexus_member_disable_portal_account",
+            ),
+            path(
+                "<path:object_id>/portal-account/enable/",
+                self.admin_site.admin_view(self.enable_portal_account_view),
+                name="campus_nexus_member_enable_portal_account",
+            ),
+        ]
+        return custom + urls
+
+    def _can_manage_portal_account(self, request):
+        return request.user.is_superuser or self.is_guild_admin(request)
+
+    def _portal_action_redirect(self, request, object_id):
+        return HttpResponseRedirect(
+            f"{reverse('admin:campus_nexus_member_change', args=[object_id])}#portal-account-tab"
+        )
+
+    def _get_member_for_portal_action(self, request, object_id):
+        member = self.get_object(request, object_id)
+        if member is None:
+            raise PermissionDenied("Member not found.")
+        if not self._can_manage_portal_account(request):
+            raise PermissionDenied("You are not allowed to manage member portal accounts.")
+        return member
+
+    def _run_portal_action(self, request, object_id, callback, success_message):
+        if request.method != "POST":
+            messages.error(request, "Portal account actions must be submitted from the Member admin page.")
+            return self._portal_action_redirect(request, object_id)
+        try:
+            member = self._get_member_for_portal_action(request, object_id)
+            callback(member)
+            if success_message:
+                messages.success(request, success_message)
+        except MemberPortalAccountError as exc:
+            messages.error(request, exc.message)
+        return self._portal_action_redirect(request, object_id)
+
+    def activate_portal_account_view(self, request, object_id):
+        def action(member):
+            result = activate_member_portal_account(member=member, activated_by=request.user)
+            member.refresh_from_db()
+            if result.email_sent:
+                messages.success(
+                    request,
+                    (
+                        f"Portal account activated for {member.full_name}. "
+                        f"Username: {result.user.username}. A password setup link has been sent."
+                    ),
+                )
+            else:
+                detail = f" {result.email_error}" if result.email_error else ""
+                messages.warning(
+                    request,
+                    (
+                        f"Portal account activated for {member.full_name}. "
+                        f"Username: {result.user.username}. "
+                        "The password setup email could not be sent. "
+                        "Use 'Send Password Setup Link' to retry."
+                        f"{detail}"
+                    ),
+                )
+
+        return self._run_portal_action(
+            request,
+            object_id,
+            action,
+            "",
+        )
+
+    def send_portal_setup_link_view(self, request, object_id):
+        return self._run_portal_action(
+            request,
+            object_id,
+            lambda member: send_member_portal_setup_email(member=member, sent_by=request.user),
+            "Password setup link sent.",
+        )
+
+    def disable_portal_account_view(self, request, object_id):
+        return self._run_portal_action(
+            request,
+            object_id,
+            lambda member: disable_member_portal_account(member=member, disabled_by=request.user),
+            "Portal access disabled.",
+        )
+
+    def enable_portal_account_view(self, request, object_id):
+        return self._run_portal_action(
+            request,
+            object_id,
+            lambda member: enable_member_portal_account(member=member, enabled_by=request.user),
+            "Portal access enabled.",
+        )
 
     def photo_thumb(self, obj):
         if obj and obj.photo:
@@ -635,6 +974,112 @@ class MemberAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             )
         return "No photo uploaded."
     photo_preview.short_description = "Current photo"
+
+    def portal_account_status(self, obj):
+        if not obj or not obj.user_id:
+            return "Not Activated"
+        return "Active" if obj.user.is_active else "Inactive"
+    portal_account_status.short_description = "Portal Account Status"
+
+    def portal_account_message(self, obj):
+        if not obj or not obj.user_id:
+            return "This member does not yet have access to the Campus Nexus Member Portal."
+        if obj.user.is_active:
+            return "This member has an active Campus Nexus Member Portal account."
+        return "This member has a linked portal account, but portal access is currently disabled."
+    portal_account_message.short_description = "Portal Account Notes"
+
+    def _portal_button(self, request, url_name, obj, label, css_class="btn-primary"):
+        url = reverse(f"admin:{url_name}", args=[obj.pk])
+        return format_html(
+            '<button type="submit" formaction="{}" formmethod="post" '
+            'class="btn {} btn-sm" style="margin:0 6px 6px 0;">{}</button>',
+            url,
+            css_class,
+            label,
+        )
+
+    def portal_account_actions(self, obj):
+        request = getattr(self, "_portal_request", None)
+        if not obj or not request:
+            return "—"
+        if not self._can_manage_portal_account(request):
+            return "Read-only"
+        if not obj.user_id:
+            return self._portal_button(
+                request,
+                "campus_nexus_member_activate_portal_account",
+                obj,
+                "Activate Portal Account",
+            )
+        if obj.user.is_active:
+            return format_html(
+                "{}{}",
+                self._portal_button(
+                    request,
+                    "campus_nexus_member_send_portal_setup_link",
+                    obj,
+                    "Resend Password Setup / Reset Link",
+                    "btn-info",
+                ),
+                self._portal_button(
+                    request,
+                    "campus_nexus_member_disable_portal_account",
+                    obj,
+                    "Disable Portal Access",
+                    "btn-danger",
+                ),
+            )
+        return format_html(
+            "{}{}",
+            self._portal_button(
+                request,
+                "campus_nexus_member_enable_portal_account",
+                obj,
+                "Enable Portal Access",
+                "btn-success",
+            ),
+            self._portal_button(
+                request,
+                "campus_nexus_member_send_portal_setup_link",
+                obj,
+                "Send Password Setup Link",
+                "btn-info",
+            ),
+        )
+    portal_account_actions.short_description = "Portal Account Actions"
+
+    def linked_user_display(self, obj):
+        if not obj or not obj.user_id:
+            return "—"
+        return obj.user.get_full_name() or obj.user.get_username()
+    linked_user_display.short_description = "Linked User"
+
+    def portal_username(self, obj):
+        return obj.user.username if obj and obj.user_id else "—"
+    portal_username.short_description = "Username"
+
+    def portal_user_email(self, obj):
+        return obj.user.email if obj and obj.user_id else "—"
+    portal_user_email.short_description = "User Email"
+
+    def portal_user_active_status(self, obj):
+        if not obj or not obj.user_id:
+            return "—"
+        return "Active" if obj.user.is_active else "Inactive"
+    portal_user_active_status.short_description = "User Active Status"
+
+    def portal_last_login(self, obj):
+        if not obj or not obj.user_id:
+            return "—"
+        return obj.user.last_login or "Never"
+    portal_last_login.short_description = "Last Login"
+
+    def portal_date_joined(self, obj):
+        if not obj or not obj.user_id:
+            return "—"
+        return obj.user.date_joined
+    portal_date_joined.short_description = "Date Joined"
 
     # Filter autocomplete ONLY for CabinetMember.member
     def get_search_results(self, request, queryset, search_term):
@@ -740,17 +1185,14 @@ class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
                     .select_related("association__faculty")
                     .first()
                 )
-                if (
-                    conflicting_faculty_membership
-                    and conflicting_faculty_membership.association.faculty_id != association.faculty_id
-                ):
+                if conflicting_faculty_membership:
                     raise ValidationError(
                         {
                             "member": (
-                                "Member you are trying to add belongs to a faculty-based association "
+                                "Member you are trying to add already belongs to an academic association "
                                 f"({conflicting_faculty_membership.association.name} - "
                                 f"{conflicting_faculty_membership.association.faculty.name}). "
-                                "You cannot add this member to another faculty-based association."
+                                "A member can belong to only one academic association."
                             )
                         }
                     )
@@ -758,6 +1200,8 @@ class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             return cleaned
 
     form = MembershipAdminForm
+    readonly_fields = ("verification_token_display", "card_available_display", "verification_path_display")
+    actions = ("rotate_verification_tokens",)
 
     def get_form(self, request, obj=None, change=False, **kwargs):
         Form = super().get_form(request, obj, change=change, **kwargs)
@@ -830,6 +1274,9 @@ class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
             fields.insert(1, "association")
 
+        if obj is not None:
+            fields.extend(["card_available_display", "verification_token_display", "verification_path_display"])
+
         return (("Membership", {"fields": fields}),)
 
     # -----------------------------
@@ -867,6 +1314,243 @@ class MembershipAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
                 "new_status": str(obj.status),
             },
         )
+
+    def verification_token_display(self, obj):
+        return obj.verification_token if obj else "—"
+    verification_token_display.short_description = "Verification Token"
+
+    def card_available_display(self, obj):
+        if not obj:
+            return "—"
+        return "Yes" if membership_card_available(obj) else "No"
+    card_available_display.short_description = "Card Available"
+
+    def verification_path_display(self, obj):
+        if not obj:
+            return "—"
+        return membership_verification_path(obj)
+    verification_path_display.short_description = "Verification Path"
+
+    @admin.action(description="Rotate selected membership verification tokens")
+    def rotate_verification_tokens(self, request, queryset):
+        if self.is_dean(request):
+            self.message_user(request, "Deans cannot rotate verification tokens.", level=messages.ERROR)
+            return
+        rotated = 0
+        for membership in queryset:
+            if not request.user.is_superuser:
+                assoc_admin = self.get_association_admin(request)
+                if not assoc_admin or membership.association_id != assoc_admin.association_id:
+                    continue
+            rotate_membership_verification_token(membership=membership, actor=request.user)
+            rotated += 1
+        self.message_user(request, f"Verification tokens rotated: {rotated}.", level=messages.SUCCESS)
+
+
+@admin.register(MembershipApplication)
+class MembershipApplicationAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = (
+        "member",
+        "registration_number",
+        "association",
+        "association_category",
+        "member_faculty",
+        "status",
+        "payment_status",
+        "applied_at",
+        "reviewed_at",
+    )
+    list_filter = ("status", "association", "applied_at", "association__faculty")
+    search_fields = (
+        "member__first_name",
+        "member__last_name",
+        "member__registration_number",
+        "member__email",
+        "association__name",
+    )
+    ordering = ("-applied_at",)
+    autocomplete_fields = ("member", "association")
+    readonly_fields = (
+        "member",
+        "association",
+        "membership",
+        "charge",
+        "status",
+        "applied_at",
+        "reviewed_at",
+        "reviewed_by",
+        "created_at",
+        "updated_at",
+        "association_category",
+        "member_faculty",
+        "member_course",
+        "eligibility_status",
+        "required_membership_fee",
+        "payment_status",
+        "payment_amount",
+        "payment_paid",
+        "payment_balance",
+    )
+    actions = ("approve_selected", "reject_selected")
+
+    fieldsets = (
+        ("Member", {"fields": ("member", "member_faculty", "member_course")}),
+        ("Association", {"fields": ("association", "association_category")}),
+        ("Eligibility", {"fields": ("eligibility_status",)}),
+        ("Application", {"fields": ("status", "applied_at", "reviewed_by", "reviewed_at")}),
+        (
+            "Finance",
+            {
+                "fields": (
+                    "required_membership_fee",
+                    "charge",
+                    "payment_status",
+                    "payment_amount",
+                    "payment_paid",
+                    "payment_balance",
+                )
+            },
+        ),
+        ("Review", {"fields": ("rejection_reason",)}),
+        ("System", {"fields": ("membership", "created_at", "updated_at")}),
+    )
+
+    def has_module_permission(self, request):
+        return (
+            request.user.is_superuser
+            or self.is_guild_admin(request)
+            or self.is_dean(request)
+            or self.is_association_admin(request)
+        )
+
+    def has_view_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return False
+        if request.user.is_superuser:
+            return True
+        assoc_admin = self.get_association_admin(request)
+        if not assoc_admin:
+            return False
+        if obj is not None:
+            return obj.association_id == assoc_admin.association_id
+        return True
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related(
+            "member",
+            "member__faculty",
+            "member__course",
+            "association",
+            "association__faculty",
+            "charge",
+            "reviewed_by",
+        )
+        if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
+            return qs
+        assoc_admin = self.get_association_admin(request)
+        if assoc_admin:
+            return qs.filter(association=assoc_admin.association)
+        return qs.none()
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if self.is_dean(request) or self.is_guild_admin(request):
+            fields.append("rejection_reason")
+        return tuple(fields)
+
+    def registration_number(self, obj):
+        return obj.member.registration_number or "—"
+
+    def association_category(self, obj):
+        return "Academic" if obj.association.faculty_id else "Non-Academic"
+
+    def member_faculty(self, obj):
+        return obj.member.faculty or "—"
+
+    def member_course(self, obj):
+        return obj.member.course or "—"
+
+    def eligibility_status(self, obj):
+        from campus_nexus.services.membership_eligibility import check_membership_eligibility
+
+        eligibility = check_membership_eligibility(
+            obj.member,
+            obj.association,
+            ignored_application_id=obj.pk,
+        )
+        if eligibility.is_eligible or obj.status in {
+            MembershipApplication.STATUS_APPROVED_PENDING_PAYMENT,
+            MembershipApplication.STATUS_ACTIVE,
+        }:
+            return "Eligible"
+        return eligibility.eligibility_reason or "Not eligible"
+
+    def required_membership_fee(self, obj):
+        try:
+            return get_required_membership_fee(obj.association).amount
+        except MembershipApplicationError as exc:
+            return exc.message
+
+    def payment_status(self, obj):
+        return obj.charge.status if obj.charge_id else "not_generated"
+
+    def payment_amount(self, obj):
+        return obj.charge.amount_due if obj.charge_id else "—"
+
+    def payment_paid(self, obj):
+        return obj.charge.amount_paid_total if obj.charge_id else "—"
+
+    def payment_balance(self, obj):
+        return obj.charge.balance if obj.charge_id else "—"
+
+    @admin.action(description="Approve selected membership applications")
+    def approve_selected(self, request, queryset):
+        approved = 0
+        failed = 0
+        for application in queryset:
+            if not request.user.is_superuser:
+                assoc_admin = self.get_association_admin(request)
+                if not assoc_admin or application.association_id != assoc_admin.association_id:
+                    failed += 1
+                    continue
+            try:
+                approve_membership_application(application=application, reviewed_by=request.user)
+                approved += 1
+            except MembershipApplicationError as exc:
+                failed += 1
+                self.message_user(request, f"{application}: {exc.message}", level=messages.ERROR)
+        self.message_user(request, f"Approved: {approved}. Failed: {failed}.", level=messages.SUCCESS)
+
+    @admin.action(description="Reject selected membership applications")
+    def reject_selected(self, request, queryset):
+        rejected = 0
+        failed = 0
+        for application in queryset:
+            if not request.user.is_superuser:
+                assoc_admin = self.get_association_admin(request)
+                if not assoc_admin or application.association_id != assoc_admin.association_id:
+                    failed += 1
+                    continue
+            try:
+                reject_membership_application(
+                    application=application,
+                    reviewed_by=request.user,
+                    reason=application.rejection_reason,
+                )
+                rejected += 1
+            except MembershipApplicationError as exc:
+                failed += 1
+                self.message_user(request, f"{application}: {exc.message}", level=messages.ERROR)
+        self.message_user(request, f"Rejected: {rejected}. Failed: {failed}.", level=messages.SUCCESS)
 
 @admin.register(Cabinet)
 class CabinetAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
@@ -1318,7 +2002,7 @@ class ChargeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         due_soon_cutoff = today + timedelta(days=3)
 
         qs = Charge.objects.select_related("membership__member", "association", "fee").annotate(
-            paid_total=Sum("payments__amount_paid")
+            paid_total=Sum("payments__amount_paid", filter=Q(payments__status="recorded"))
         )
 
         # scope data to association admin
@@ -1382,7 +2066,7 @@ class ChargeAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
             super()
             .get_queryset(request)
             .select_related("membership", "membership__member", "association", "fee")
-            .annotate(paid_total=Sum("payments__amount_paid"))
+            .annotate(paid_total=Sum("payments__amount_paid", filter=Q(payments__status="recorded")))
         )
 
         if request.user.is_superuser:
@@ -1495,6 +2179,10 @@ class PaymentAdminForm(forms.ModelForm):
             "note",
             "status",
         )
+        help_texts = {
+            "payment_method": "Record cash only after payment has physically been received and verified.",
+            "reference_code": "Leave blank to generate a unique Campus Nexus payment reference.",
+        }
 
     def clean(self):
         cleaned = super().clean()
@@ -1699,12 +2387,14 @@ class PaymentAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
                 )
             obj.charge = charge
 
+        obj.full_clean()
         super().save_model(request, obj, form, change)
 
         # Recompute charge status after saving payment
         if obj.charge_id:
-            obj.charge.recompute_status()
-            obj.charge.save(update_fields=["status"])
+            from campus_nexus.services.membership_application import sync_membership_payment_state_for_charge
+
+            sync_membership_payment_state_for_charge(charge=obj.charge, actor=request.user)
 
         # Email notification after commit
         transaction.on_commit(lambda: send_payment_recorded_email(
@@ -1994,6 +2684,71 @@ class EventAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+@admin.register(EventRegistration)
+class EventRegistrationAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = ("member", "event", "association", "status", "registered_at", "cancelled_at")
+    list_filter = ("status", "event__association", "registered_at")
+    search_fields = (
+        "member__first_name",
+        "member__last_name",
+        "member__registration_number",
+        "event__title",
+        "event__association__name",
+    )
+    list_select_related = ("member", "event", "event__association")
+    readonly_fields = (
+        "event",
+        "member",
+        "status",
+        "registered_at",
+        "cancelled_at",
+        "transition_version",
+        "created_at",
+        "updated_at",
+    )
+
+    def association(self, obj):
+        return obj.event.association
+    association.short_description = "Association"
+    association.admin_order_field = "event__association__name"
+
+    def has_module_permission(self, request):
+        return (
+            request.user.is_superuser
+            or self.is_guild_admin(request)
+            or self.is_dean(request)
+            or self.is_association_admin(request)
+        )
+
+    def has_view_permission(self, request, obj=None):
+        if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
+            return True
+        assoc_admin = self.get_association_admin(request)
+        if not assoc_admin:
+            return False
+        if obj is not None:
+            return obj.event.association_id == assoc_admin.association_id
+        return True
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related("member", "event", "event__association")
+        if request.user.is_superuser or self.is_guild_admin(request) or self.is_dean(request):
+            return qs
+        assoc_admin = self.get_association_admin(request)
+        if assoc_admin:
+            return qs.filter(event__association_id=assoc_admin.association_id)
+        return qs.none()
+
+
 @admin.register(AuditLog)
 class AuditLogAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
     list_display = ("created_at", "action", "model_name", "object_repr", "actor", "association")
@@ -2028,26 +2783,98 @@ class AuditLogAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
 
 
 @admin.register(Feedback)
-class FeedbackAdmin(admin.ModelAdmin):
-    list_display = ("subject", "association", "member", "submitted_by", "submitted_at")
-    list_filter = ("association", "submitted_at")
-    search_fields = ("subject", "message", "member__email", "member__registration_number", "submitted_by__username")
-    readonly_fields = ("submitted_at", "submitted_by", "association", "member", "subject", "message")
+class FeedbackAdmin(CheckUserIdentityMixin, admin.ModelAdmin):
+    list_display = ("subject", "category", "status", "association", "member", "submitted_at", "responded_at")
+    list_filter = ("status", "category", "association", "submitted_at")
+    search_fields = (
+        "subject",
+        "message",
+        "member__email",
+        "member__registration_number",
+        "member__first_name",
+        "member__last_name",
+        "submitted_by__username",
+    )
+    readonly_fields = (
+        "submitted_at",
+        "updated_at",
+        "submitted_by",
+        "association",
+        "member",
+        "subject",
+        "message",
+        "responded_by",
+        "responded_at",
+    )
+    fields = (
+        "association",
+        "member",
+        "category",
+        "subject",
+        "message",
+        "status",
+        "admin_response",
+        "responded_by",
+        "responded_at",
+        "submitted_by",
+        "submitted_at",
+        "updated_at",
+    )
+    list_select_related = ("association", "member", "submitted_by", "responded_by")
 
     def has_module_permission(self, request):
-        return request.user.is_superuser
+        return request.user.is_superuser or self.is_association_admin(request) or self.is_dean(request) or self.is_guild_admin(request)
 
     def has_view_permission(self, request, obj=None):
-        return request.user.is_superuser
+        if request.user.is_superuser or self.is_dean(request) or self.is_guild_admin(request):
+            return True
+        assoc_admin = self.get_association_admin(request)
+        if not assoc_admin:
+            return False
+        if obj is not None:
+            return obj.association_id == assoc_admin.association_id
+        return True
 
     def has_add_permission(self, request):
-        return request.user.is_superuser
+        return False
 
     def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
+        if request.user.is_superuser:
+            return True
+        if self.is_dean(request) or self.is_guild_admin(request):
+            return False
+        assoc_admin = self.get_association_admin(request)
+        if not assoc_admin:
+            return False
+        if obj is not None:
+            return obj.association_id == assoc_admin.association_id
+        return True
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related("association", "member", "submitted_by", "responded_by")
+        if request.user.is_superuser or self.is_dean(request) or self.is_guild_admin(request):
+            return qs
+        assoc_admin = self.get_association_admin(request)
+        if assoc_admin:
+            return qs.filter(association_id=assoc_admin.association_id)
+        return qs.none()
+
+    def save_model(self, request, obj, form, change):
+        from campus_nexus.services.member_feedback import apply_admin_feedback_update
+
+        if not change or not obj.pk:
+            super().save_model(request, obj, form, change)
+            return
+        old = Feedback.objects.get(pk=obj.pk)
+        apply_admin_feedback_update(
+            feedback=obj,
+            actor=request.user,
+            old_status=old.status,
+            old_response=old.admin_response,
+        )
     
 class FeedbackSubmitForm(forms.Form):
     subject = forms.CharField(max_length=200, widget=forms.TextInput(attrs={"class": "vTextField"}))
