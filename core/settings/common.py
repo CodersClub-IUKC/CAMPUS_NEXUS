@@ -117,6 +117,10 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+    "DEFAULT_THROTTLE_RATES": {
+        "password_reset": os.getenv("PASSWORD_RESET_THROTTLE_RATE", "5/hour"),
+        "password_reset_confirm": os.getenv("PASSWORD_RESET_CONFIRM_THROTTLE_RATE", "10/hour"),
+    },
 }
 
 SIMPLE_JWT = {
@@ -301,6 +305,13 @@ JAZZMIN_UI_TWEAKS = {
 
 ASSOCIATION_DEFAULT_THEME = ("#3b82f6", "#64748b")
 CAMPUS_NEXUS_SITE_URL = os.getenv("CAMPUS_NEXUS_SITE_URL", "http://localhost:8000")
+MEMBER_PORTAL_ORIGIN = os.getenv("MEMBER_PORTAL_ORIGIN", "http://localhost:5173")
+PASSWORD_RESET_IDENTIFIER_MAX_REQUESTS_PER_WINDOW = int(
+    os.getenv("PASSWORD_RESET_IDENTIFIER_MAX_REQUESTS_PER_WINDOW", "3")
+)
+PASSWORD_RESET_IDENTIFIER_WINDOW_SECONDS = int(
+    os.getenv("PASSWORD_RESET_IDENTIFIER_WINDOW_SECONDS", "3600")
+)
 
 # ---------------------------------------------------------------------
 # Email (SMTP - env driven)

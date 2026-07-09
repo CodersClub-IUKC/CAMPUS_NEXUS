@@ -1,10 +1,17 @@
 from rest_framework import status
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from campus_nexus.api.v1.permissions import IsAuthenticatedMember
+from campus_nexus.api.v1.auth.serializers import (
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetValidateSerializer,
+)
 from campus_nexus.api.v1.serializers import CurrentMemberSerializer, MemberTokenObtainPairSerializer
 
 
@@ -39,3 +46,33 @@ class CurrentMemberView(APIView):
         serializer = CurrentMemberSerializer(request.user, context={"request": request})
         return Response(serializer.data)
 
+
+class PasswordResetRequestView(APIView):
+    permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "password_reset"
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.save(), status=status.HTTP_202_ACCEPTED)
+
+
+class PasswordResetValidateView(APIView):
+    permission_classes = (AllowAny,)
+
+    def post(self, request):
+        serializer = PasswordResetValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response({"valid": serializer.validated_data["valid"]})
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "password_reset_confirm"
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.save())

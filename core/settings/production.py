@@ -34,7 +34,7 @@ if "*" in ALLOWED_HOSTS:
 CSRF_TRUSTED_ORIGINS = _env_csv("CSRF_TRUSTED_ORIGINS")
 
 CORS_ALLOWED_ORIGINS = _env_csv("CORS_ALLOWED_ORIGINS")
-member_portal_origin = os.getenv("MEMBER_PORTAL_ORIGIN", "").strip()
+member_portal_origin = _require_env("MEMBER_PORTAL_ORIGIN")
 if member_portal_origin and member_portal_origin not in CORS_ALLOWED_ORIGINS:
     CORS_ALLOWED_ORIGINS.append(member_portal_origin)
 CORS_ALLOW_CREDENTIALS = _env_bool("CORS_ALLOW_CREDENTIALS", False)
