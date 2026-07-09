@@ -1,5 +1,5 @@
 from datetime import timedelta
-
+from django.db import models
 from django.contrib import admin, messages
 from django import forms
 from django.core.exceptions import PermissionDenied, ValidationError
