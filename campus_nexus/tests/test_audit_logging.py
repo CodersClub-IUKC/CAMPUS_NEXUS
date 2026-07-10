@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from campus_nexus.models import Association, AuditLog, Faculty, Member, Membership
+from campus_nexus.services.audit import record_audit_event
 
 
 class AuditLoggingTests(TestCase):
@@ -73,3 +74,21 @@ class AuditLoggingTests(TestCase):
                 object_id=str(self.membership.id),
             ).exists()
         )
+
+    def test_record_audit_event_preserves_unicode_object_repr(self):
+        class UnicodeObject:
+            pk = "unicode-object"
+            _meta = type("Meta", (), {"label_lower": "campus_nexus.unicodeobject"})()
+
+            def __str__(self):
+                return "Member Name → Association Name"
+
+        record_audit_event(
+            actor=self.superuser,
+            action="unicode_object_repr_recorded",
+            obj=UnicodeObject(),
+            association=self.association,
+        )
+
+        audit_log = AuditLog.objects.get(action="unicode_object_repr_recorded")
+        self.assertEqual(audit_log.object_repr, "Member Name → Association Name")
