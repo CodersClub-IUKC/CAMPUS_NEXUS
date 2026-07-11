@@ -1,3 +1,4 @@
+from django.contrib.admin.models import ADDITION, LogEntry
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -92,3 +93,43 @@ class AuditLoggingTests(TestCase):
 
         audit_log = AuditLog.objects.get(action="unicode_object_repr_recorded")
         self.assertEqual(audit_log.object_repr, "Member Name → Association Name")
+
+    def test_membership_admin_add_logs_unicode_object_repr(self):
+        member = Member.objects.create(
+            first_name="Admin",
+            last_name="Unicode",
+            email="admin.unicode@example.com",
+            phone="0700000012",
+            registration_number="223-063012-998",
+            national_id_number="CM00000012ZZ",
+            member_type="student",
+            faculty=self.faculty,
+        )
+
+        url = reverse("admin:campus_nexus_membership_add")
+        response = self.client.post(
+            url,
+            data={
+                "member": str(member.id),
+                "association": str(self.association.id),
+                "subscription_anchor_date": "",
+                "_save": "Save",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        membership = Membership.objects.get(member=member, association=self.association)
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action="membership_created",
+                model_name="campus_nexus.membership",
+                object_id=str(membership.id),
+            ).exists()
+        )
+        log_entry = LogEntry.objects.get(
+            action_flag=ADDITION,
+            content_type__app_label="campus_nexus",
+            content_type__model="membership",
+            object_id=str(membership.id),
+        )
+        self.assertIn("→", log_entry.object_repr)
