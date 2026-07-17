@@ -47,7 +47,7 @@ class GuildExecutiveProfileViewTests(TestCase):
             national_id_number="CM12345678AA",
             member_type="student",
             faculty=cls.faculty,
-            nationality="Uganda",
+            nationality="Ugandan",
             photo=SimpleUploadedFile("member.jpg", b"fake-image-bytes", content_type="image/jpeg"),
         )
 
@@ -102,7 +102,7 @@ class GuildExecutiveProfileViewTests(TestCase):
         self.executive.refresh_from_db()
         self.assertEqual(self.executive.ministry, "Education")
 
-    def test_member_admin_form_exposes_photo_and_country_dropdown(self):
+    def test_member_admin_form_exposes_photo_and_nationality_dropdown(self):
         self.client.login(username="guildadmin", password="pass12345")
         url = reverse("admin:campus_nexus_member_add")
         response = self.client.get(url)
@@ -110,5 +110,4 @@ class GuildExecutiveProfileViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="photo"')
         self.assertContains(response, 'name="nationality"')
-        self.assertContains(response, "<option value=\"Uganda\">Uganda</option>", html=False)
-
+        self.assertContains(response, "<option value=\"Ugandan\">Ugandan</option>", html=False)

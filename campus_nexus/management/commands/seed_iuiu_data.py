@@ -71,7 +71,7 @@ class Command(BaseCommand):
                         'phone': '0700000000',
                         'member_type': 'student',
                         'course': d['course'],
-                        'nationality': 'UG'
+                        'nationality': 'Ugandan'
                     }
                 )
                 assoc = iusa if d['course'] == cs_course else law_soc

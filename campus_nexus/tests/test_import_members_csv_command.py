@@ -40,7 +40,7 @@ class ImportMembersCsvCommandTests(TestCase):
         self.assertEqual(member.faculty_id, faculty.id)
         self.assertEqual(member.course_id, course.id)
         self.assertEqual(member.created_by_id, importer.id)
-        self.assertEqual(member.nationality, "Uganda")
+        self.assertEqual(member.nationality, "Ugandan")
 
     def test_dry_run_does_not_commit(self):
         faculty = Faculty.objects.create(name="Faculty of Arts")
@@ -53,4 +53,3 @@ class ImportMembersCsvCommandTests(TestCase):
 
         call_command("import_members_csv", csv_path, dry_run=True)
         self.assertFalse(Member.objects.filter(email="john@example.com").exists())
-
